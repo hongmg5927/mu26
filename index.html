@@ -278,6 +278,40 @@
         } catch { return {}; }
       });
 
+      // [교사용 실시간 세부 데이터 편집 상태]
+      const [inquiryDataState, setInquiryDataState] = useState(() => {
+        try {
+          const s = localStorage.getItem('music_custom_inquiry_data');
+          return s ? JSON.parse(s) : INQUIRY_DATA;
+        } catch { return INQUIRY_DATA; }
+      });
+
+      const [productDataState, setProductDataState] = useState(() => {
+        try {
+          const s = localStorage.getItem('music_custom_product_data');
+          return s ? JSON.parse(s) : PRODUCT_DATA;
+        } catch { return PRODUCT_DATA; }
+      });
+
+      const [popHistoryDataState, setPopHistoryDataState] = useState(() => {
+        try {
+          const s = localStorage.getItem('music_custom_pop_data');
+          return s ? JSON.parse(s) : POP_HISTORY_DATA;
+        } catch { return POP_HISTORY_DATA; }
+      });
+
+      const [eastWestDataState, setEastWestDataState] = useState(() => {
+        try {
+          const s = localStorage.getItem('music_custom_eastwest_data');
+          return s ? JSON.parse(s) : EAST_WEST_DATA;
+        } catch { return EAST_WEST_DATA; }
+      });
+
+      // 카드 편집 모달 상태
+      const [activeItemEditModal, setActiveItemEditModal] = useState(false);
+      const [editingItemCategory, setEditingItemCategory] = useState('');
+      const [editingItemForm, setEditingItemForm] = useState(null);
+
       // 교사 비밀번호 변경 폼 상태
       const [newTeacherId, setNewTeacherId] = useState('');
       const [newTeacherPw, setNewTeacherPw] = useState('');
@@ -418,6 +452,39 @@
       const handleSaveTopicGuides = () => {
         localStorage.setItem('music_topic_guides', JSON.stringify(topicGuides));
         showToast('수행평가 4대 주제 및 안내 설명이 저장되었습니다! 📝');
+      };
+
+      // 교사용 개별 카드 편집 저장
+      const handleSaveItemEdit = (e) => {
+        e.preventDefault();
+        if (!editingItemForm) return;
+
+        if (editingItemCategory === 'inquiry') {
+          const updated = inquiryDataState.map(it => it.id === editingItemForm.id ? editingItemForm : it);
+          setInquiryDataState(updated);
+          localStorage.setItem('music_custom_inquiry_data', JSON.stringify(updated));
+        } else if (editingItemCategory === 'product') {
+          const updated = productDataState.map(it => it.id === editingItemForm.id ? editingItemForm : it);
+          setProductDataState(updated);
+          localStorage.setItem('music_custom_product_data', JSON.stringify(updated));
+        } else if (editingItemCategory === 'pop_history') {
+          const updated = popHistoryDataState.map(it => it.era === editingItemForm.era ? editingItemForm : it);
+          setPopHistoryDataState(updated);
+          localStorage.setItem('music_custom_pop_data', JSON.stringify(updated));
+        } else if (editingItemCategory === 'east_west') {
+          const updated = eastWestDataState.map(it => it.id === editingItemForm.id ? editingItemForm : it);
+          setEastWestDataState(updated);
+          localStorage.setItem('music_custom_eastwest_data', JSON.stringify(updated));
+        }
+
+        setActiveItemEditModal(false);
+        showToast('탐구 내용(개념, 가설, 실험 등)이 수정·저장되었습니다! ✏️');
+      };
+
+      const openItemEditor = (cat, item) => {
+        setEditingItemCategory(cat);
+        setEditingItemForm(JSON.parse(JSON.stringify(item)));
+        setActiveItemEditModal(true);
       };
 
       // 주제별 맞춤 모달 열기 핸들러 (교사 관리자 모드에서도 점검 및 시뮬레이션 가능)
@@ -638,11 +705,18 @@
                 e('button', { onClick: () => openReportModal('inquiry', { question: '자율 융합 탐구 주제' }), className: 'mt-4 w-full py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs' }, '+ 자율 융합 보고서 쓰기')
               ),
               // 추천 융합 주제 목록
-              INQUIRY_DATA.filter(it => selectedSubject === 'all' || it.subjectId === selectedSubject).map(item =>
-                e('div', { key: item.id, className: 'bg-white rounded-2xl border border-slate-200 p-5 flex flex-col justify-between shadow-sm' },
+              inquiryDataState.filter(it => selectedSubject === 'all' || it.subjectId === selectedSubject).map(item =>
+                e('div', { key: item.id, className: 'relative bg-white rounded-2xl border border-slate-200 p-5 flex flex-col justify-between shadow-sm hover:border-indigo-300 transition' },
+                  // 교사 모드일 때 우측 상단 편집 버튼
+                  currentUser?.role === 'teacher' && e('button', {
+                    onClick: (ev) => { ev.stopPropagation(); openItemEditor('inquiry', item); },
+                    className: 'absolute top-4 right-4 px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold text-2xs flex items-center gap-1 shadow-sm border border-purple-300 transition',
+                    title: '교사 권한: 개념, 가설, 변인 및 실험 내용 편집'
+                  }, e('i', { className: 'fa-solid fa-pen text-2xs' }), e('span', null, '편집')),
+
                   e('div', null,
                     e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700' }, item.subjectName),
-                    e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1.5 leading-snug' }, item.question),
+                    e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1.5 leading-snug pr-12' }, item.question),
                     e('div', { className: 'p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5 mb-2' },
                       e('div', { className: 'text-xs text-slate-700 leading-relaxed' },
                         e('strong', { className: 'text-indigo-900 font-bold mr-1' }, '핵심 개념:'),
@@ -656,15 +730,15 @@
                     item.variables && e('div', { className: 'p-2.5 rounded-xl bg-indigo-50/40 border border-indigo-100/60 mb-2 variable-box text-slate-600 space-y-1' },
                       e('div', { className: 'flex items-center gap-1.5' },
                         e('span', { className: 'text-2xs font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700' }, '독립변인'),
-                        e('span', { className: 'text-2xs' }, item.variables.independent)
+                        e('span', { className: 'text-2xs' }, typeof item.variables === 'string' ? item.variables.split('/')[0]?.replace('독립변인:', '').trim() : item.variables.independent)
                       ),
                       e('div', { className: 'flex items-center gap-1.5' },
                         e('span', { className: 'text-2xs font-extrabold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700' }, '종속변인'),
-                        e('span', { className: 'text-2xs' }, item.variables.dependent)
+                        e('span', { className: 'text-2xs' }, typeof item.variables === 'string' ? item.variables.split('/')[1]?.replace('종속변인:', '').trim() : item.variables.dependent)
                       ),
                       e('div', { className: 'flex items-center gap-1.5' },
                         e('span', { className: 'text-2xs font-extrabold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700' }, '통제변인'),
-                        e('span', { className: 'text-2xs' }, item.variables.controlled)
+                        e('span', { className: 'text-2xs' }, typeof item.variables === 'string' ? item.variables.split('/')[2]?.replace('통제변인:', '').trim() : item.variables.controlled)
                       )
                     ),
                     e('p', { className: 'text-xs text-slate-500 leading-relaxed' },
@@ -672,7 +746,128 @@
                       item.activity
                     )
                   ),
-                  e('button', { onClick: () => openReportModal('inquiry', item), className: 'mt-4 w-full py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs' }, '이 주제로 보고서 작성')
+                  e('button', { onClick: () => openReportModal('inquiry', item), className: 'mt-4 w-full py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition' }, '이 주제로 보고서 작성')
+                )
+              )
+            )
+          ),
+
+          // 탭 2: 주제 2. 음악 문화유산 상품 개발
+          mainTab === 'product' && e('div', { className: 'space-y-4' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
+              e('div', null,
+                e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 2. 음악 문화유산 상품 개발'),
+                e('p', { className: 'text-xs text-slate-500' }, '문화유산의 가치를 담아 현대적 굿즈, 앱, 게임을 Slide 07 4분면으로 기획합니다.')
+              )
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+              // [1번 선택지 고정] 자율 상품 기획 카드
+              e('div', { className: 'bg-gradient-to-br from-emerald-50 to-white rounded-2xl border-2 border-dashed border-emerald-300 p-5 flex flex-col justify-between shadow-sm' },
+                e('div', null,
+                  e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-emerald-600 text-white' }, '선택지 01 · 자율 기획'),
+                  e('h3', { className: 'text-base font-bold text-emerald-950 mt-2 mb-1' }, '내가 직접 전통/서양 음악 문화유산 상품 기획하기'),
+                  e('p', { className: 'text-xs text-emerald-800/80' }, '음악 교과서 속 악곡이나 악기를 골라 상품명, 음악적 특징, 개발 방식, 기대 효과를 4분면으로 기획합니다.')
+                ),
+                e('button', { onClick: () => openReportModal('product', { name: '자율 문화유산 상품 기획' }), className: 'mt-4 w-full py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '+ 자율 4분면 기획서 쓰기')
+              ),
+              // 추천 문화유산 상품 모델
+              productDataState.map(item =>
+                e('div', { key: item.id, className: 'relative bg-white rounded-2xl border-2 border-emerald-100 p-5 flex flex-col justify-between shadow-sm hover:border-emerald-300 transition' },
+                  // 교사 모드 편집 버튼
+                  currentUser?.role === 'teacher' && e('button', {
+                    onClick: (ev) => { ev.stopPropagation(); openItemEditor('product', item); },
+                    className: 'absolute top-4 right-4 px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold text-2xs flex items-center gap-1 shadow-sm border border-purple-300 transition',
+                    title: '교사 권한: 상품명, 음악적 특징, 개발 방식 등 편집'
+                  }, e('i', { className: 'fa-solid fa-pen text-2xs' }), e('span', null, '편집')),
+
+                  e('div', null,
+                    e('h3', { className: 'text-base font-bold text-slate-900 mb-2 pr-12' }, item.name),
+                    e('p', { className: 'text-xs text-slate-600 mb-1' }, e('strong', { className: 'text-emerald-900 mr-1' }, '음악적 특징:'), item.musicTrait),
+                    e('p', { className: 'text-xs text-slate-600 mb-1' }, e('strong', { className: 'text-emerald-900 mr-1' }, '개발 방식:'), item.howToDevelop),
+                    e('p', { className: 'text-xs text-slate-500' }, e('strong', { className: 'text-slate-700 mr-1' }, '기대 효과:'), item.impact)
+                  ),
+                  e('button', { onClick: () => openReportModal('product', item), className: 'mt-4 w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition' }, '이 상품으로 보고서 작성')
+                )
+              )
+            )
+          ),
+
+          // 탭 3: 주제 3. 대중음악사&미래 음악 예측
+          mainTab === 'pop_history' && e('div', { className: 'space-y-4' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
+              e('div', null,
+                e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 3. 대중음악사&미래 음악 예측'),
+                e('p', { className: 'text-xs text-slate-500' }, '시대별 대중음악 흐름을 정리하고 2030 미래 음악을 Slide 08 규격으로 예측합니다.')
+              )
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+              // [1번 선택지 고정] 자율 시대 종합 분석 카드
+              e('div', { className: 'bg-gradient-to-br from-teal-50 to-white rounded-2xl border-2 border-dashed border-teal-300 p-5 flex flex-col justify-between shadow-sm' },
+                e('div', null,
+                  e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-teal-700 text-white' }, '선택지 01 · 자율 정리'),
+                  e('h3', { className: 'text-sm font-bold text-teal-950 mt-2 mb-1' }, '전 시대를 종합하여 대중음악사 정리 및 2030 미래 예측'),
+                  e('p', { className: 'text-xs text-teal-800/80' }, '연대별 기록, 3문장 특징, 대표곡 3선 및 선정이유, 2030 3문장 예측을 Slide 08 기준에 맞게 직접 완성합니다.')
+                ),
+                e('button', { onClick: () => openReportModal('pop_history', { question: '대중음악사 종합 정리 및 2030 미래 예측' }), className: 'mt-4 w-full py-2 rounded-xl bg-teal-600 text-white font-bold text-xs' }, '+ 자율 대중음악사 보고서 쓰기')
+              ),
+              // 시대별 가이드 카드
+              popHistoryDataState.map(item =>
+                e('div', { key: item.era, className: 'relative bg-white rounded-2xl border border-teal-200 p-5 flex flex-col justify-between shadow-sm hover:border-teal-400 transition' },
+                  // 교사 모드 편집 버튼
+                  currentUser?.role === 'teacher' && e('button', {
+                    onClick: (ev) => { ev.stopPropagation(); openItemEditor('pop_history', item); },
+                    className: 'absolute top-4 right-4 px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold text-2xs flex items-center gap-1 shadow-sm border border-purple-300 transition',
+                    title: '교사 권한: 시대 요약, 대표 장르, 대표곡 등 편집'
+                  }, e('i', { className: 'fa-solid fa-pen text-2xs' }), e('span', null, '편집')),
+
+                  e('div', null,
+                    e('span', { className: 'text-xs font-black px-2 py-0.5 rounded bg-teal-700 text-white' }, item.era),
+                    e('h4', { className: 'text-xs font-bold text-slate-900 mt-2 mb-1 pr-12' }, `장르: ${item.genre}`),
+                    e('p', { className: 'text-xs text-slate-600 mb-2 leading-relaxed' }, item.summary),
+                    e('p', { className: 'text-2xs text-teal-800 font-bold' }, `대표곡: ${item.songs}`)
+                  ),
+                  e('button', { onClick: () => openReportModal('pop_history', { question: `${item.era} 중심 대중음악사 탐구`, concept: item.genre, summary: item.summary, songs: item.songs }), className: 'mt-4 w-full py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-xs transition' }, '이 시대로 보고서 작성')
+                )
+              )
+            )
+          ),
+
+          // 탭 4: 주제 4. 국악·서양음악 이론 심화 탐구
+          mainTab === 'east_west' && e('div', { className: 'space-y-4' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
+              e('div', null,
+                e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 4. 국악·서양음악 이론 심화 탐구'),
+                e('p', { className: 'text-xs text-slate-500' }, '조율학, 기보학, 지휘법 등 동서양 이론을 1:1 맞비교하여 탐구합니다.')
+              )
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+              // [1번 선택지 고정] 자율 동서양 비교 카드
+              e('div', { className: 'bg-gradient-to-br from-amber-50 to-white rounded-2xl border-2 border-dashed border-amber-300 p-5 flex flex-col justify-between shadow-sm' },
+                e('div', null,
+                  e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-amber-700 text-white' }, '선택지 01 · 자율 맞비교'),
+                  e('h3', { className: 'text-base font-bold text-amber-950 mt-2 mb-1' }, '내가 직접 발견한 동서양 음악 이론 1:1 대조 탐구'),
+                  e('p', { className: 'text-xs text-amber-800/80' }, '동서양의 조율, 음정, 기보, 악기 분류 체계 중 하나를 골라 서양 이론과 국악 이론의 차이를 교차 실증합니다.')
+                ),
+                e('button', { onClick: () => openReportModal('east_west', { title: '자율 동서양 이론 비교 탐구' }), className: 'mt-4 w-full py-2 rounded-xl bg-amber-600 text-white font-bold text-xs' }, '+ 자율 동서양 보고서 쓰기')
+              ),
+              // 추천 맞비교 테마
+              eastWestDataState.map(item =>
+                e('div', { key: item.id, className: 'relative bg-white rounded-2xl border-2 border-amber-100 p-5 flex flex-col justify-between shadow-sm hover:border-amber-300 transition' },
+                  // 교사 모드 편집 버튼
+                  currentUser?.role === 'teacher' && e('button', {
+                    onClick: (ev) => { ev.stopPropagation(); openItemEditor('east_west', item); },
+                    className: 'absolute top-4 right-4 px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold text-2xs flex items-center gap-1 shadow-sm border border-purple-300 transition',
+                    title: '교사 권한: 개념, 비교 분석, 실험 활동 등 편집'
+                  }, e('i', { className: 'fa-solid fa-pen text-2xs' }), e('span', null, '편집')),
+
+                  e('div', null,
+                    e('span', { className: 'text-2xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded' }, item.title),
+                    e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1 pr-12' }, item.question),
+                    e('p', { className: 'text-xs text-slate-600 mb-1' }, e('strong', { className: 'text-amber-900 mr-1' }, '개념:'), item.concept),
+                    e('p', { className: 'text-xs text-amber-950/80 mb-2 line-clamp-2' }, e('strong', { className: 'text-amber-900 mr-1' }, '비교:'), item.comparison),
+                    e('p', { className: 'text-2xs text-slate-500' }, e('strong', { className: 'text-slate-700 mr-1' }, '실험:'), item.activity)
+                  ),
+                  e('button', { onClick: () => openReportModal('east_west', item), className: 'mt-4 w-full py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition' }, '이 주제로 보고서 작성')
                 )
               )
             )
@@ -1142,6 +1337,124 @@
             e('div', { className: 'flex justify-end gap-2 p-4 border-t bg-slate-50' },
               e('button', { onClick: () => saveReport(false), className: 'px-4 py-2 border rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-100' }, '임시 저장'),
               e('button', { onClick: () => saveReport(true), className: 'px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow' }, '최종 제출')
+            )
+          )
+        ),
+
+        // [신규] 교사용 개별 카드 세부 내용(개념, 가설, 변인, 실험) 편집 팝업 모달
+        activeItemEditModal && editingItemForm && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
+          e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-fade-in' },
+            e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
+              e('div', { className: 'flex items-center gap-2' },
+                e('div', { className: 'w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center text-xs font-bold' },
+                  e('i', { className: 'fa-solid fa-pen-ruler' })
+                ),
+                e('div', null,
+                  e('h3', { className: 'text-sm font-black text-purple-950' }, '교사 관리자: 탐구 카드 세부 내용 편집'),
+                  e('p', { className: 'text-2xs text-purple-700' }, '수정한 내용은 학생들의 탐구 카드 목록에 즉각 적용됩니다.')
+                )
+              ),
+              e('button', { onClick: () => setActiveItemEditModal(false), className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
+              )
+            ),
+
+            e('form', { onSubmit: handleSaveItemEdit, className: 'p-6 space-y-3.5 text-xs' },
+              // 주제 1 편집 폼
+              editingItemCategory === 'inquiry' && e('div', { className: 'space-y-3' },
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '탐구 질문 (제목)'),
+                  e('input', { type: 'text', value: editingItemForm.question || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, question: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs font-bold' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '핵심 개념'),
+                  e('input', { type: 'text', value: editingItemForm.concept || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, concept: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '가설 설정'),
+                  e('textarea', { rows: 2, value: editingItemForm.hypothesis || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, hypothesis: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '변인 통제 (독립/종속/통제)'),
+                  e('input', {
+                    type: 'text',
+                    value: typeof editingItemForm.variables === 'string'
+                      ? editingItemForm.variables
+                      : `독립변인: ${editingItemForm.variables?.independent || ''} / 종속변인: ${editingItemForm.variables?.dependent || ''} / 통제변인: ${editingItemForm.variables?.controlled || ''}`,
+                    onChange: (ev) => setEditingItemForm({ ...editingItemForm, variables: ev.target.value }),
+                    className: 'w-full p-2 border rounded-xl text-xs variable-box'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '실험·측정 활동 내용'),
+                  e('textarea', { rows: 2, value: editingItemForm.activity || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, activity: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                )
+              ),
+
+              // 주제 2 편집 폼
+              editingItemCategory === 'product' && e('div', { className: 'space-y-3' },
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '상품명 (Brand & Type)'),
+                  e('input', { type: 'text', value: editingItemForm.name || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, name: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs font-bold' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '해당 음악의 특징 (Heritage)'),
+                  e('textarea', { rows: 2, value: editingItemForm.musicTrait || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, musicTrait: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '구체적 개발 방식 (How to develop)'),
+                  e('textarea', { rows: 2, value: editingItemForm.howToDevelop || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, howToDevelop: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '얻을 수 있는 효과 (Impact)'),
+                  e('textarea', { rows: 2, value: editingItemForm.impact || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, impact: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                )
+              ),
+
+              // 주제 3 편집 폼
+              editingItemCategory === 'pop_history' && e('div', { className: 'space-y-3' },
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '시대 구분 (예: 1980년대)'),
+                  e('input', { type: 'text', value: editingItemForm.era || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, era: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs font-bold' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '대표 장르 및 매체'),
+                  e('input', { type: 'text', value: editingItemForm.genre || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, genre: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '시대 흐름 요약'),
+                  e('textarea', { rows: 3, value: editingItemForm.summary || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, summary: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '시대 대표곡 목록'),
+                  e('input', { type: 'text', value: editingItemForm.songs || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, songs: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                )
+              ),
+
+              // 주제 4 편집 폼
+              editingItemCategory === 'east_west' && e('div', { className: 'space-y-3' },
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '탐구 질문 (Question)'),
+                  e('input', { type: 'text', value: editingItemForm.question || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, question: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs font-bold' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '핵심 개념 (Concept)'),
+                  e('input', { type: 'text', value: editingItemForm.concept || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, concept: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '동서양 1:1 맞비교 분석'),
+                  e('textarea', { rows: 3, value: editingItemForm.comparison || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, comparison: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '실험·실증 활동 내용'),
+                  e('textarea', { rows: 2, value: editingItemForm.activity || '', onChange: (ev) => setEditingItemForm({ ...editingItemForm, activity: ev.target.value }), className: 'w-full p-2 border rounded-xl text-xs' })
+                )
+              ),
+
+              e('div', { className: 'flex justify-end gap-2 pt-3 border-t' },
+                e('button', { type: 'button', onClick: () => setActiveItemEditModal(false), className: 'px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50' }, '취소'),
+                e('button', { type: 'submit', className: 'px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow' }, '변경 내용 저장')
+              )
             )
           )
         )
