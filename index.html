@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>송악고등학교 음악 수행평가 포털</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React 18 & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- FontAwesome 6 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- Pretendard Font -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+  <style>
+    body { font-family: 'Pretendard', sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+  <div id="root"></div>
+
+  <script>
+    const e = React.createElement;
+    const { useState, useEffect, useMemo } = React;
+
+    // --- 음표 SVG 아이콘 ---
+    function WholeNoteIcon(props) {
+      return e('svg', { viewBox: '0 0 24 24', fill: 'none', className: `${props.className || 'w-5 h-5'} pointer-events-none shrink-0` },
+        e('g', { transform: 'rotate(-25 12 12)' },
+          e('ellipse', { cx: 12, cy: 12, rx: 7.2, ry: 4.4, stroke: props.color || 'currentColor', strokeWidth: 2.4, fill: 'none' }),
+          e('ellipse', { cx: 12, cy: 12, rx: 4.2, ry: 2.2, stroke: props.color || 'currentColor', strokeWidth: 1.2, fill: 'none' })
+        )
+      );
+    }
+
+    function HalfNoteIcon(props) {
+      return e('svg', { viewBox: '0 0 24 24', fill: 'none', className: `${props.className || 'w-5 h-5'} pointer-events-none shrink-0` },
+        e('rect', { x: 14.6, y: 2.5, width: 1.8, height: 14, rx: 0.9, fill: props.color || 'currentColor' }),
+        e('g', { transform: 'rotate(-25 10.5 16.5)' },
+          e('ellipse', { cx: 10.5, cy: 16.5, rx: 5.2, ry: 3.3, stroke: props.color || 'currentColor', strokeWidth: 2.2, fill: 'none' })
+        )
+      );
+    }
+
+    function QuarterNoteIcon(props) {
+      return e('svg', { viewBox: '0 0 24 24', fill: 'none', className: `${props.className || 'w-5 h-5'} pointer-events-none shrink-0` },
+        e('rect', { x: 14.6, y: 2.5, width: 1.8, height: 14, rx: 0.9, fill: props.color || 'currentColor' }),
+        e('g', { transform: 'rotate(-25 10.5 16.5)' },
+          e('ellipse', { cx: 10.5, cy: 16.5, rx: 5, ry: 3.4, fill: props.color || 'currentColor' })
+        )
+      );
+    }
+
+    function EighthNoteIcon(props) {
+      return e('svg', { viewBox: '0 0 24 24', fill: 'none', className: `${props.className || 'w-5 h-5'} pointer-events-none shrink-0` },
+        e('rect', { x: 12.8, y: 2.5, width: 1.8, height: 14, rx: 0.9, fill: props.color || 'currentColor' }),
+        e('g', { transform: 'rotate(-25 8.5 16.5)' },
+          e('ellipse', { cx: 8.5, cy: 16.5, rx: 5, ry: 3.4, fill: props.color || 'currentColor' })
+        ),
+        e('path', { d: 'M14.6 2.5C14.6 2.5 16.8 5.2 19.8 6.5C20.8 6.9 21.2 7.6 21 8.5C20.8 9.3 19.6 9.6 18.6 9.1C16.4 7.8 15.2 6.2 14.6 4.8V2.5Z', fill: props.color || 'currentColor' })
+      );
+    }
+
+    // --- 교과 목록 & 데이터 ---
+    const SUBJECTS = [
+      { id: 'all', name: '전체 교과', icon: 'fa-sparkles' },
+      { id: 'korean', name: '국어', icon: 'fa-book' },
+      { id: 'english', name: '영어', icon: 'fa-language' },
+      { id: 'math', name: '수학', icon: 'fa-calculator' },
+      { id: 'social', name: '사회', icon: 'fa-globe' },
+      { id: 'science', name: '과학', icon: 'fa-atom' },
+      { id: 'history', name: '한국사', icon: 'fa-landmark' },
+      { id: 'pe', name: '체육', icon: 'fa-heart-pulse' },
+      { id: 'art', name: '미술', icon: 'fa-palette' }
+    ];
+
+    const INQUIRY_DATA = [
+      { id: 'k1', subjectId: 'korean', subjectName: '국어', question: '현대 힙합 랩의 라임(Rhyme)과 고전 시가의 운율은 무엇이 다를까?', concept: '운율(압운, 음보), 음성 상징어', activity: '유명 랩 가사와 고려가요·가사 문학의 자음/모음 반복 구조 표 대조 분석' },
+      { id: 'k2', subjectId: 'korean', subjectName: '국어', question: '대중가요 가사는 왜 시보다 직관적이고 쉬운 단어를 많이 쓸까?', concept: '구어체와 문어체, 청각 전달력', activity: '시 1편을 노랫말로 개작해 보고 단어 난이도 및 반복 빈도 텍스트 분석' },
+      { id: 'e1', subjectId: 'english', subjectName: '영어', question: '팝송을 부를 때 한국어보다 영어 연음(Linking)이 더 매끄럽게 들리는 이유는?', concept: '연음 규칙, 음운 탈락/첨가, 강세 박자', activity: '팝송 속 연음 구간을 끊어 부를 때와 연음으로 부를 때 박자감 비교' },
+      { id: 'm1', subjectId: 'math', subjectName: '수학', question: '피아노 건반 1옥타브는 왜 등차수열이 아니라 등비수열일까?', concept: '등비수열, 거듭제곱근(2^(1/12))', activity: '건반별 진동수(Hz) 그래프 작성 및 지수함수 수식 일치성 검증' },
+      { id: 's1', subjectId: 'social', subjectName: '사회', question: '대형 콘서트 티켓팅에서 발생하는 암표 거래와 동적 가격제는 정당할까?', concept: '수요와 공급, 시장 실패, 암표 규제', activity: '좌석별 암표 프리미엄 가격 추이 조사 및 공정성 찬반 설문조사' },
+      { id: 'sc1', subjectId: 'science', subjectName: '과학', question: '공간 구조와 흡음재 재질에 따른 소리 잔향 시간(RT60) 감쇠 차이는?', concept: '파동의 반사, 흡수, 음향 감쇠', activity: '화장실, 교실, 음악실에서 박수 충격음 감쇠 시간 앱으로 실측 비교' },
+      { id: 'h1', subjectId: 'history', subjectName: '한국사', question: '세종대왕은 왜 신하들의 반대를 무릅쓰고 박연과 함께 아악(편경)을 정비했을까?', concept: '예악 정치, 국가 전례, 문화적 자주성', activity: '편경 제작 기록 조사 및 왕권 강화와 자주성에 미친 영향 분석' },
+      { id: 'pe1', subjectId: 'pe', subjectName: '체육', question: '음악의 BPM과 템포가 운동 시 심박수 및 지구력 유지에 미치는 영향은?', concept: '자율신경계 반응, 심박수, 운동 강도(RPE)', activity: '무음 vs 140 BPM 음악 환경에서 스쿼트 반복 횟수 및 심박수 비교' },
+      { id: 'a1', subjectId: 'art', subjectName: '미술', question: '밝은 장조와 어두운 단조 음악을 들었을 때 떠오르는 색깔은 정해져 있을까?', concept: '색채 심리, 난색과 한색, 공감각', activity: '다장조 곡과 다단조 곡 청취 후 12색 색연필 연상 투표 집계' }
+    ];
+
+    const PRODUCT_DATA = [
+      { id: 'p1', name: '태평지음(太平之音) – 종묘제례악 힐링 수면 무드등 & 사운드 테라피', musicTrait: '편경과 편종의 맑은 배음 구조와 느리고 일정한 박자의 궁중 제례악', howToDevelop: '편경·편종 소리를 432Hz 힐링 주파수로 리마스터링하여 수면 한지 무드등과 결합', impact: '궁중 음악을 현대인의 수면 힐링 콘텐츠로 대중화' },
+      { id: 'p2', name: '비트 오프 별주부 – 판소리 수궁가 사설 장단 횡스크롤 리듬 게임', musicTrait: '진양조부터 중모리, 자진모리, 휘모리로 점차 빨라지는 장단의 박진감', howToDevelop: '자라와 토끼의 탈출기를 2D 도트 게임으로 디자인하고 북장단 타이밍에 맞춰 버튼 입력', impact: '판소리를 게임 문법으로 재해석하여 전통 장단 습득 촉진' },
+      { id: 'p3', name: '비트 메이커 쇠(SOE) – 허공에서 연주하는 사물놀이 모션 스마트 장갑', musicTrait: '꽹과리, 징, 장구, 북의 4가지 타악기가 만들어내는 폭발적인 악센트', howToDevelop: '자이로 센서 장갑을 끼고 허공을 타격하면 블루투스로 사물놀이 소리 출력', impact: '소음 걱정 없이 교실과 원룸에서 사물놀이 합주 가능' },
+      { id: 'p4', name: '포 시즌스 모닝 – 비발디 사계 기반 기상예보 맞춤 클래식 알람 앱', musicTrait: '봄의 새소리, 여름의 천둥, 겨울의 얼음판을 묘사한 표제음악', howToDevelop: '실시간 날씨 API와 연동해 비가 오면 폭풍우 악장, 맑으면 봄 1악장을 해설과 함께 재생', impact: '클래식 감상을 일상 루틴과 연결' }
+    ];
+
+    const POP_HISTORY_DATA = [
+      { era: '1970년대', media: 'LP판, 통기타', genre: '포크, 록', songs: '송창식(왜 불러), 김민기(아침이슬)', summary: '청년들의 자유와 낭만을 대변한 포크 음악과 그룹사운드 태동기' },
+      { era: '1980년대', media: '카세트테이프', genre: '발라드, 신스팝', songs: '이문세(난 아직 모르잖아요), 조용필(모나리자)', summary: '감성 팝 발라드와 웅장한 신디사이저 편곡의 황금기' },
+      { era: '1990년대', media: 'CD, 가요 순위제', genre: '댄스 팝, 랩, 1세대 아이돌', songs: '서태지와 아이들(난 알아요), H.O.T.(전사의 후예)', summary: '랩/댄스의 주류화와 기획사형 아이돌의 폭발적 탄생' },
+      { era: '2000년대', media: 'MP3, 음원 다운로드', genre: '소몰이 R&B, 후크송', songs: 'SG워너비(살다가), 원더걸스(Tell Me)', summary: '디지털 음원 전환 및 아시아 한류 초석 구축' },
+      { era: '2010년대', media: '스마트폰, 유튜브', genre: 'EDM-팝, K-POP', songs: '싸이(강남스타일), 방탄소년단(봄날)', summary: '글로벌 빌보드 진입과 멀티미디어 세계관 융합' },
+      { era: '2020년대', media: '숏폼(틱톡, 릴스)', genre: '이지리스닝, Y2K 뉴트로', songs: '뉴진스(Ditto), IVE(Love Dive)', summary: '2분 미만 초단축 음원과 편안한 멜로디의 대세화' }
+    ];
+
+    const EAST_WEST_DATA = [
+      { id: 'ew1', title: '조율학 & 수학', question: '삼분손익법(2/3, 4/3) vs 피타고라스 음계(2/3, 2/1): 동서양 최초의 조율 알고리즘 일치성 증명', concept: '황종~임종(완전5도), 삼분손익법, 피타고라스 5도 누적', activity: '계산기로 12율명과 피타고라스 진동수 도출 및 콤마(오차) 비교' },
+      { id: 'ew2', title: '기보학 & 인지과학', question: '세종의 정간보(우물 정 井) vs 서양의 오선보(5줄 4칸): 시간과 음높이 시각화의 공간적 사고 비교', concept: '정간보(박자 시간 공간화) vs 오선보(음높이 시각화)', activity: '동일한 동요를 정간보와 오선보로 기보 후 초견 연주 정확도 측정' },
+      { id: 'ew3', title: '지휘법 & 신체운동학', question: '서양의 4박자 기하학 지휘 도형 vs 국악의 호흡 장단(합·쿵·덕·기덕) 모션 센서 가속도 비교', concept: '외향적 비트 분할 vs 단전호흡 들숨·날숨 장단', activity: '스마트폰 가속도계 앱으로 지휘 도형과 장단 칠 때의 3축 파형 분석' }
+    ];
+
+    function App() {
+      const [mainTab, setMainTab] = useState('inquiry');
+      const [currentUser, setCurrentUser] = useState(null);
+      const [studentIdInput, setStudentIdInput] = useState('');
+      const [studentPwInput, setStudentPwInput] = useState('');
+      const [studentNameInput, setStudentNameInput] = useState('');
+      const [isRegisterMode, setIsRegisterMode] = useState(false);
+
+      const [showTeacherModal, setShowTeacherModal] = useState(false);
+      const [teacherIdInput, setTeacherIdInput] = useState('');
+      const [teacherPwInput, setTeacherPwInput] = useState('');
+      const [teacherAuth, setTeacherAuth] = useState(() => {
+        try {
+          const s = localStorage.getItem('music_teacher_auth');
+          return s ? JSON.parse(s) : { id: 'admin', pw: '123456' };
+        } catch { return { id: 'admin', pw: '123456' }; }
+      });
+
+      const [allSubmissions, setAllSubmissions] = useState(() => {
+        try {
+          const s = localStorage.getItem('music_assessment_submissions');
+          return s ? JSON.parse(s) : {};
+        } catch { return {}; }
+      });
+
+      const [activeReportModal, setActiveReportModal] = useState(false);
+      const [reportForm, setReportForm] = useState({
+        slot: 'report1',
+        topicTitle: '',
+        coreConcept: '',
+        mainContent: '',
+        activityOrPlan: '',
+        aiLog: { prompt: '', criticalReview: '' }
+      });
+
+      const [selectedSubject, setSelectedSubject] = useState('all');
+      const [toastMessage, setToastMessage] = useState('');
+
+      const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(''), 2500);
+      };
+
+      const getStudentAccounts = () => {
+        try {
+          const s = localStorage.getItem('music_student_accounts');
+          return s ? JSON.parse(s) : {};
+        } catch { return {}; }
+      };
+
+      const handleStudentRegister = (ev) => {
+        ev.preventDefault();
+        if (!/^\d{4}$/.test(studentIdInput)) { showToast('학번은 4자리 숫자여야 합니다.'); return; }
+        if (!studentNameInput.trim()) { showToast('성명을 입력해 주세요.'); return; }
+        if (!/^\d{4}$/.test(studentPwInput)) { showToast('비밀번호는 4자리 숫자여야 합니다.'); return; }
+
+        const accs = getStudentAccounts();
+        if (accs[studentIdInput]) { showToast('이미 등록된 학번입니다.'); return; }
+
+        accs[studentIdInput] = { id: studentIdInput, name: studentNameInput.trim(), pw: studentPwInput };
+        localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+
+        if (!allSubmissions[studentIdInput]) {
+          const up = { ...allSubmissions, [studentIdInput]: { studentId: studentIdInput, studentName: studentNameInput.trim(), reports: {} } };
+          setAllSubmissions(up);
+          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+        }
+
+        setCurrentUser({ role: 'student', id: studentIdInput, name: studentNameInput.trim() });
+        setIsRegisterMode(false);
+        showToast(`${studentNameInput} 님, 등록 및 로그인 완료! 🎉`);
+      };
+
+      const handleStudentLogin = (ev) => {
+        ev.preventDefault();
+        const accs = getStudentAccounts();
+        const a = accs[studentIdInput];
+        if (!a) { showToast('등록되지 않은 학번입니다. [최초 등록하기]를 눌러주세요.'); return; }
+        if (a.pw !== studentPwInput) { showToast('비밀번호가 일치하지 않습니다.'); return; }
+        setCurrentUser({ role: 'student', id: a.id, name: a.name });
+        showToast(`${a.name} 님, 환영합니다!`);
+      };
+
+      const handleTeacherLogin = (ev) => {
+        ev.preventDefault();
+        if (teacherIdInput === teacherAuth.id && teacherPwInput === teacherAuth.pw) {
+          setCurrentUser({ role: 'teacher', id: teacherAuth.id, name: '음악과 교사' });
+          setShowTeacherModal(false);
+          setTeacherIdInput('');
+          setTeacherPwInput('');
+          setMainTab('teacher_dash');
+          showToast('교사 관리자 모드로 접속했습니다. 🛡️');
+        } else {
+          showToast('아이디 또는 6자리 비밀번호가 일치하지 않습니다.');
+        }
+      };
+
+      const handleLogout = () => {
+        setCurrentUser(null);
+        setMainTab('inquiry');
+        showToast('로그아웃되었습니다.');
+      };
+
+      const openReportModal = (item, defaultSlot = null) => {
+        if (!currentUser || currentUser.role !== 'student') {
+          showToast('학생 로그인 후 작성할 수 있습니다.');
+          return;
+        }
+        const sData = allSubmissions[currentUser.id] || { reports: {} };
+        const slot = defaultSlot || (!sData.reports?.report1 ? 'report1' : 'report2');
+        const ex = sData.reports?.[slot];
+
+        setReportForm({
+          slot,
+          topicTitle: ex?.topicTitle || item?.question || item?.name || item?.title || '',
+          coreConcept: ex?.coreConcept || item?.concept || item?.musicTrait || '',
+          mainContent: ex?.mainContent || item?.howToDevelop || item?.summary || '',
+          activityOrPlan: ex?.activityOrPlan || item?.activity || item?.impact || '',
+          aiLog: ex?.aiLog || { prompt: '', criticalReview: '' }
+        });
+        setActiveReportModal(true);
+      };
+
+      const saveReport = (isSubmit) => {
+        const sData = allSubmissions[currentUser.id] || { studentId: currentUser.id, studentName: currentUser.name, reports: {} };
+        const now = new Date().toLocaleString('ko-KR');
+        const up = {
+          ...allSubmissions,
+          [currentUser.id]: {
+            ...sData,
+            reports: {
+              ...sData.reports,
+              [reportForm.slot]: { ...reportForm, isSubmitted: isSubmit, updatedAt: now }
+            }
+          }
+        };
+        setAllSubmissions(up);
+        localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+        setActiveReportModal(false);
+        showToast(isSubmit ? '보고서가 최종 제출되었습니다! 🎉' : '임시 저장되었습니다. 💾');
+      };
+
+      const resetAllData = () => {
+        const c = prompt('모든 학생 계정(학번/비밀번호) 및 제출 데이터를 완전히 삭제하시겠습니까?\n진행하시려면 "RESET"을 입력하세요.');
+        if (c === 'RESET') {
+          localStorage.removeItem('music_assessment_submissions');
+          localStorage.removeItem('music_student_accounts');
+          setAllSubmissions({});
+          if (currentUser?.role === 'student') setCurrentUser(null);
+          showToast('학기 데이터가 완전히 초기화되었습니다. 🔄');
+        }
+      };
+
+      const downloadCSV = () => {
+        const rows = [['학번', '성명', '과제1 주제', '과제1 제출', '과제2 주제', '과제2 제출', '총점(60)', '세특 메모']];
+        Object.values(allSubmissions).forEach(s => {
+          const r1 = s.reports?.report1;
+          const r2 = s.reports?.report2;
+          rows.push([
+            s.studentId,
+            s.studentName,
+            r1 ? `"${r1.topicTitle.replace(/"/g, '""')}"` : '미선택',
+            r1?.isSubmitted ? '제출' : '미제출',
+            r2 ? `"${r2.topicTitle.replace(/"/g, '""')}"` : '미선택',
+            r2?.isSubmitted ? '제출' : '미제출',
+            s.grading?.totalScore !== undefined ? s.grading.totalScore : '미채점',
+            `"${(s.grading?.teacherFeedback || '').replace(/"/g, '""')}"`
+          ]);
+        });
+        const blob = new Blob(['\uFEFF' + rows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `송악고_음악수행평가_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('엑셀(CSV) 파일이 다운로드되었습니다.');
+      };
+
+      return e('div', { className: 'min-h-screen flex flex-col' },
+        // 토스트
+        toastMessage && e('div', { className: 'fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-xs font-bold border border-slate-700 flex items-center gap-2' },
+          e('i', { className: 'fa-solid fa-circle-check text-emerald-400' }),
+          e('span', null, toastMessage)
+        ),
+
+        // 헤더
+        e('header', { className: 'bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm' },
+          e('div', { className: 'max-w-7xl mx-auto px-4 py-3 flex items-center justify-between' },
+            e('div', { className: 'flex items-center gap-3' },
+              e('div', { className: 'w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-indigo-600 flex items-center justify-center text-white shadow' },
+                e('i', { className: 'fa-solid fa-compass text-lg' })
+              ),
+              e('div', null,
+                e('div', { className: 'flex items-center gap-2' },
+                  e('h1', { className: 'text-base sm:text-lg font-black text-slate-900' }, '송악고등학교 음악 수행평가'),
+                  e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800' }, '개인 탐구 2개 30점씩 총 60점 만점')
+                ),
+                e('p', { className: 'text-2xs text-slate-500 hidden sm:block' }, '4개의 주제 중 2가지 선택 탐구 | AI 프롬프트 분석 | 5점 급간 루브릭 채점 활용')
+              )
+            ),
+            e('div', { className: 'flex items-center gap-2' },
+              currentUser ? e('div', { className: 'flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold' },
+                e('i', { className: 'fa-solid fa-user text-slate-500' }),
+                e('span', null, `${currentUser.name} (${currentUser.id})`),
+                e('button', { onClick: handleLogout, className: 'text-slate-400 hover:text-rose-600 ml-1' }, e('i', { className: 'fa-solid fa-right-from-bracket' }))
+              ) : e('button', { onClick: () => setShowTeacherModal(true), className: 'px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5' },
+                e('i', { className: 'fa-solid fa-shield-halved text-purple-600' }),
+                e('span', null, '교사 관리자 모드')
+              )
+            )
+          ),
+
+          // 탭 바 (음표 아이콘 + 명칭)
+          e('div', { className: 'bg-slate-100 border-t border-slate-200 overflow-x-auto no-scrollbar' },
+            e('div', { className: 'max-w-7xl mx-auto px-4 flex items-center gap-1 min-w-max' },
+              e('button', { onClick: () => setMainTab('inquiry'), className: `flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ${mainTab === 'inquiry' ? 'border-indigo-600 text-indigo-700 bg-white' : 'border-transparent text-slate-600'}` },
+                e(WholeNoteIcon, { className: 'w-5 h-5 text-indigo-600' }),
+                e('span', null, '주제 1. 교과 융합 탐구')
+              ),
+              e('button', { onClick: () => setMainTab('product'), className: `flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ${mainTab === 'product' ? 'border-emerald-600 text-emerald-700 bg-white' : 'border-transparent text-slate-600'}` },
+                e(HalfNoteIcon, { className: 'w-5 h-5 text-emerald-600' }),
+                e('span', null, '주제 2. 음악 문화유산 상품 개발')
+              ),
+              e('button', { onClick: () => setMainTab('pop_history'), className: `flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ${mainTab === 'pop_history' ? 'border-teal-600 text-teal-800 bg-white' : 'border-transparent text-slate-600'}` },
+                e(QuarterNoteIcon, { className: 'w-5 h-5 text-teal-600' }),
+                e('span', null, '주제 3. 대중음악사&미래 음악 예측')
+              ),
+              e('button', { onClick: () => setMainTab('east_west'), className: `flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ${mainTab === 'east_west' ? 'border-amber-600 text-amber-800 bg-white' : 'border-transparent text-slate-600'}` },
+                e(EighthNoteIcon, { className: 'w-5 h-5 text-amber-600' }),
+                e('span', null, '주제 4. 국악·서양음악 이론 심화 탐구')
+              ),
+              currentUser?.role === 'student' && e('button', { onClick: () => setMainTab('my_reports'), className: `flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ml-auto ${mainTab === 'my_reports' ? 'border-rose-600 text-rose-700 bg-white' : 'border-transparent text-slate-600'}` },
+                e('i', { className: 'fa-solid fa-file-pen text-rose-600' }),
+                e('span', null, '내 보고서 제출·정리 (2가지)')
+              ),
+              currentUser?.role === 'teacher' && e('button', { onClick: () => setMainTab('teacher_dash'), className: `flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ml-auto ${mainTab === 'teacher_dash' ? 'border-purple-600 text-purple-700 bg-white' : 'border-transparent text-slate-600'}` },
+                e('i', { className: 'fa-solid fa-user-shield text-purple-600' }),
+                e('span', null, '교사 평가 관리 대시보드')
+              )
+            )
+          )
+        ),
+
+        // 미로그인 배너
+        !currentUser && e('div', { className: 'bg-slate-900 text-white py-3 px-4 shadow-inner' },
+          e('div', { className: 'max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3' },
+            e('div', { className: 'flex items-center gap-2 text-xs' },
+              e('i', { className: 'fa-solid fa-lock text-amber-400' }),
+              e('span', null, '학생 탐구 작성 및 수행평가 제출을 위해 학번(4자리)과 비밀번호(4자리)로 로그인해 주세요.')
+            ),
+            isRegisterMode ? e('form', { onSubmit: handleStudentRegister, className: 'flex items-center gap-1.5' },
+              e('input', { type: 'text', maxLength: 4, placeholder: '학번 4자리', value: studentIdInput, onChange: (ev) => setStudentIdInput(ev.target.value), className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
+              e('input', { type: 'text', placeholder: '성명', value: studentNameInput, onChange: (ev) => setStudentNameInput(ev.target.value), className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
+              e('input', { type: 'password', maxLength: 4, placeholder: '비번 4자리', value: studentPwInput, onChange: (ev) => setStudentPwInput(ev.target.value), className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
+              e('button', { type: 'submit', className: 'px-3 py-1 rounded bg-emerald-600 text-white font-bold text-xs' }, '등록 완료'),
+              e('button', { type: 'button', onClick: () => setIsRegisterMode(false), className: 'text-2xs text-slate-300 underline ml-1' }, '로그인으로')
+            ) : e('form', { onSubmit: handleStudentLogin, className: 'flex items-center gap-1.5' },
+              e('input', { type: 'text', maxLength: 4, placeholder: '학번 4자리', value: studentIdInput, onChange: (ev) => setStudentIdInput(ev.target.value), className: 'px-2 py-1 rounded text-xs text-slate-900 w-24', required: true }),
+              e('input', { type: 'password', maxLength: 4, placeholder: '비밀번호 4자리', value: studentPwInput, onChange: (ev) => setStudentPwInput(ev.target.value), className: 'px-2 py-1 rounded text-xs text-slate-900 w-24', required: true }),
+              e('button', { type: 'submit', className: 'px-3 py-1 rounded bg-indigo-600 text-white font-bold text-xs' }, '로그인'),
+              e('button', { type: 'button', onClick: () => setIsRegisterMode(true), className: 'px-2 py-1 rounded bg-slate-800 text-amber-300 font-bold text-xs' }, '최초 등록하기')
+            )
+          )
+        ),
+
+        // 메인 콘텐츠 영역
+        e('main', { className: 'max-w-7xl mx-auto px-4 py-6 w-full flex-1' },
+          // 탭 1
+          mainTab === 'inquiry' && e('div', { className: 'space-y-4' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
+              e('div', null,
+                e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 1. 교과 융합 탐구'),
+                e('p', { className: 'text-xs text-slate-500' }, '8개 교과와 음악을 융합하여 일상의 질문을 실험으로 입증합니다.')
+              ),
+              e('button', { onClick: () => openReportModal({ question: '새로운 교과 융합 탐구' }), className: 'px-3.5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs' }, '+ 새 주제 직접 작성')
+            ),
+            e('div', { className: 'flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar' },
+              SUBJECTS.map(s => e('button', { key: s.id, onClick: () => setSelectedSubject(s.id), className: `px-3 py-1.5 rounded-xl text-xs font-bold border ${selectedSubject === s.id ? 'bg-indigo-900 text-white' : 'bg-white text-slate-600'}` }, s.name))
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+              INQUIRY_DATA.filter(it => selectedSubject === 'all' || it.subjectId === selectedSubject).map(item =>
+                e('div', { key: item.id, className: 'bg-white rounded-2xl border border-slate-200 p-5 flex flex-col justify-between shadow-sm' },
+                  e('div', null,
+                    e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700' }, item.subjectName),
+                    e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1' }, item.question),
+                    e('p', { className: 'text-xs text-slate-600 mb-1' }, `개념: ${item.concept}`),
+                    e('p', { className: 'text-xs text-slate-500' }, `실험: ${item.activity}`)
+                  ),
+                  e('button', { onClick: () => openReportModal(item), className: 'mt-4 w-full py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs' }, '이 주제로 보고서 작성')
+                )
+              )
+            )
+          ),
+
+          // 탭 2
+          mainTab === 'product' && e('div', { className: 'space-y-4' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
+              e('div', null,
+                e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 2. 음악 문화유산 상품 개발'),
+                e('p', { className: 'text-xs text-slate-500' }, '문화유산의 가치를 담아 현대적 굿즈, 앱, 게임을 4분면으로 기획합니다.')
+              ),
+              e('button', { onClick: () => openReportModal({ name: '새로운 문화유산 상품 기획' }), className: 'px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '+ 새 상품 직접 기획')
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+              PRODUCT_DATA.map(item =>
+                e('div', { key: item.id, className: 'bg-white rounded-2xl border-2 border-emerald-100 p-5 flex flex-col justify-between shadow-sm' },
+                  e('div', null,
+                    e('h3', { className: 'text-base font-bold text-slate-900 mb-2' }, item.name),
+                    e('p', { className: 'text-xs text-slate-600 mb-1' }, `음악적 특징: ${item.musicTrait}`),
+                    e('p', { className: 'text-xs text-slate-600 mb-1' }, `개발 방식: ${item.howToDevelop}`),
+                    e('p', { className: 'text-xs text-slate-500' }, `기대 효과: ${item.impact}`)
+                  ),
+                  e('button', { onClick: () => openReportModal(item), className: 'mt-4 w-full py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '이 상품으로 보고서 작성')
+                )
+              )
+            )
+          ),
+
+          // 탭 3
+          mainTab === 'pop_history' && e('div', { className: 'space-y-4' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
+              e('div', null,
+                e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 3. 대중음악사&미래 음악 예측'),
+                e('p', { className: 'text-xs text-slate-500' }, '시대별 대중음악 흐름을 정리하고 2030 미래 음악을 예측합니다.')
+              ),
+              e('button', { onClick: () => openReportModal({ question: '대중음악사 정리 및 2030 미래 예측' }), className: 'px-3.5 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs' }, '+ 대중음악사 보고서 작성')
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+              POP_HISTORY_DATA.map(item =>
+                e('div', { key: item.era, className: 'bg-white rounded-2xl border border-teal-200 p-5 flex flex-col justify-between shadow-sm' },
+                  e('div', null,
+                    e('span', { className: 'text-xs font-black px-2 py-0.5 rounded bg-teal-700 text-white' }, item.era),
+                    e('h4', { className: 'text-xs font-bold text-slate-900 mt-2 mb-1' }, `장르: ${item.genre}`),
+                    e('p', { className: 'text-xs text-slate-600 mb-2' }, item.summary),
+                    e('p', { className: 'text-2xs text-teal-800 font-bold' }, `대표곡: ${item.songs}`)
+                  ),
+                  e('button', { onClick: () => openReportModal({ question: `${item.era} 중심 대중음악사 탐구`, concept: item.genre, summary: item.summary }), className: 'mt-4 w-full py-2 rounded-xl bg-teal-50 text-teal-800 font-bold text-xs' }, '이 시대로 보고서 작성')
+                )
+              )
+            )
+          ),
+
+          // 탭 4
+          mainTab === 'east_west' && e('div', { className: 'space-y-4' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
+              e('div', null,
+                e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 4. 국악·서양음악 이론 심화 탐구'),
+                e('p', { className: 'text-xs text-slate-500' }, '조율학, 기보학, 지휘법 등 동서양 이론을 맞비교하여 탐구합니다.')
+              ),
+              e('button', { onClick: () => openReportModal({ title: '새로운 동서양 비교 탐구' }), className: 'px-3.5 py-2 rounded-xl bg-amber-600 text-white font-bold text-xs' }, '+ 새 비교 주제 작성')
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+              EAST_WEST_DATA.map(item =>
+                e('div', { key: item.id, className: 'bg-white rounded-2xl border-2 border-amber-100 p-5 flex flex-col justify-between shadow-sm' },
+                  e('div', null,
+                    e('span', { className: 'text-2xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded' }, item.title),
+                    e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1' }, item.question),
+                    e('p', { className: 'text-xs text-slate-600 mb-1' }, `개념: ${item.concept}`),
+                    e('p', { className: 'text-xs text-slate-500' }, `실험: ${item.activity}`)
+                  ),
+                  e('button', { onClick: () => openReportModal(item), className: 'mt-4 w-full py-2 rounded-xl bg-amber-600 text-white font-bold text-xs' }, '이 주제로 보고서 작성')
+                )
+              )
+            )
+          ),
+
+          // 학생 보고서 페이지
+          mainTab === 'my_reports' && currentUser?.role === 'student' && e('div', { className: 'space-y-6' },
+            e('div', { className: 'bg-gradient-to-r from-rose-900 to-indigo-950 rounded-3xl p-6 text-white' },
+              e('h2', { className: 'text-xl font-black' }, `${currentUser.name} (${currentUser.id}) 님의 개인 탐구 2개 종합 정리`),
+              e('p', { className: 'text-xs text-slate-300 mt-1' }, '각 과제당 30점씩 총 60점 만점 구조입니다. 최종 제출 여부를 확인하세요.')
+            ),
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+              ['report1', 'report2'].map((slot, idx) => {
+                const rep = allSubmissions[currentUser.id]?.reports?.[slot];
+                return e('div', { key: slot, className: 'bg-white rounded-3xl border-2 border-slate-200 p-6 flex flex-col justify-between shadow-sm' },
+                  e('div', null,
+                    e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-100 mb-4' },
+                      e('h3', { className: 'text-base font-extrabold text-slate-900' }, `선택 과제 ${idx + 1} (30점)`),
+                      e('span', { className: `text-2xs font-extrabold px-2.5 py-1 rounded-full ${rep?.isSubmitted ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}` }, rep?.isSubmitted ? '최종 제출 완료' : '미제출')
+                    ),
+                    rep ? e('div', { className: 'space-y-2 text-xs' },
+                      e('p', { className: 'font-bold text-slate-900' }, `주제: ${rep.topicTitle}`),
+                      e('p', { className: 'text-slate-600' }, `개념: ${rep.coreConcept}`),
+                      e('p', { className: 'text-slate-600 line-clamp-3' }, `내용: ${rep.mainContent}`),
+                      e('div', { className: 'p-3 bg-purple-50 rounded-xl text-purple-900 mt-2' },
+                        e('p', { className: 'font-bold' }, `AI 질문: ${rep.aiLog?.prompt || '없음'}`),
+                        e('p', null, `비판 검증: ${rep.aiLog?.criticalReview || '없음'}`)
+                      )
+                    ) : e('p', { className: 'text-xs text-slate-400 py-8 text-center' }, '아직 선택된 탐구 과제가 없습니다.')
+                  ),
+                  e('button', { onClick: () => openReportModal(rep, slot), className: 'mt-6 w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs' }, rep ? '보고서 수정하기' : '이 슬롯에 과제 등록')
+                );
+              })
+            )
+          ),
+
+          // 교사 관리자 페이지
+          mainTab === 'teacher_dash' && currentUser?.role === 'teacher' && e('div', { className: 'space-y-6' },
+            e('div', { className: 'bg-gradient-to-r from-purple-900 to-indigo-950 rounded-3xl p-6 text-white flex items-center justify-between' },
+              e('div', null,
+                e('h2', { className: 'text-xl font-black' }, '송악고 음악과 교사 평가 관리 대시보드'),
+                e('p', { className: 'text-xs text-slate-300 mt-1' }, '학생 제출물 확인 및 60점 만점 5점 급간 채점')
+              ),
+              e('div', { className: 'flex gap-2' },
+                e('button', { onClick: downloadCSV, className: 'px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '엑셀(CSV) 다운로드'),
+                e('button', { onClick: resetAllData, className: 'px-3.5 py-2 rounded-xl bg-rose-600 text-white font-bold text-xs' }, '학기 데이터 리셋')
+              )
+            ),
+            e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 shadow-sm overflow-x-auto' },
+              e('table', { className: 'w-full text-left text-xs' },
+                e('thead', null,
+                  e('tr', { className: 'border-b border-slate-200 bg-slate-50' },
+                    e('th', { className: 'py-2 px-3' }, '학번'),
+                    e('th', { className: 'px-3' }, '이름'),
+                    e('th', { className: 'px-3' }, '과제 1 주제'),
+                    e('th', { className: 'px-3' }, '과제 2 주제'),
+                    e('th', { className: 'px-3' }, '총점(60)'),
+                    e('th', { className: 'px-3 text-center' }, '상세/채점')
+                  )
+                ),
+                e('tbody', { className: 'divide-y divide-slate-100' },
+                  Object.values(allSubmissions).map(s => e('tr', { key: s.studentId },
+                    e('td', { className: 'py-3 px-3 font-mono font-bold' }, s.studentId),
+                    e('td', { className: 'px-3' }, s.studentName),
+                    e('td', { className: 'px-3' }, s.reports?.report1?.topicTitle || '미선택'),
+                    e('td', { className: 'px-3' }, s.reports?.report2?.topicTitle || '미선택'),
+                    e('td', { className: 'px-3 font-bold text-indigo-600' }, s.grading?.totalScore !== undefined ? `${s.grading.totalScore}점` : '미채점'),
+                    e('td', { className: 'px-3 text-center' },
+                      e('button', { onClick: () => {
+                        const sc1 = prompt(`${s.studentName} 학생 과제 1 점수 (15점 만점, 15/10/5 중 입력):`, '15');
+                        const sc2 = prompt(`${s.studentName} 학생 과제 2 점수 (15점 만점, 15/10/5 중 입력):`, '15');
+                        const fb = prompt('세특 메모:', '');
+                        if (sc1 && sc2) {
+                          const total = Number(sc1) * 2 + Number(sc2) * 2;
+                          const up = { ...allSubmissions, [s.studentId]: { ...s, grading: { totalScore: total, teacherFeedback: fb || '' } } };
+                          setAllSubmissions(up);
+                          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+                          showToast('채점이 저장되었습니다.');
+                        }
+                      }, className: 'px-2.5 py-1 rounded bg-slate-900 text-white font-bold text-2xs' }, '채점하기')
+                    )
+                  ))
+                )
+              )
+            )
+          )
+        ),
+
+        // 교사 로그인 모달
+        showTeacherModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60' },
+          e('div', { className: 'bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl' },
+            e('div', { className: 'flex justify-between items-center' },
+              e('h3', { className: 'text-sm font-black' }, '교사 관리자 모드 접속'),
+              e('button', { onClick: () => setShowTeacherModal(false) }, e('i', { className: 'fa-solid fa-xmark' }))
+            ),
+            e('form', { onSubmit: handleTeacherLogin, className: 'space-y-3' },
+              e('input', { type: 'text', placeholder: '교사 아이디', value: teacherIdInput, onChange: (ev) => setTeacherIdInput(ev.target.value), className: 'w-full px-3 py-2 text-xs border rounded-xl', required: true }),
+              e('input', { type: 'password', maxLength: 6, placeholder: '비밀번호 6자리', value: teacherPwInput, onChange: (ev) => setTeacherPwInput(ev.target.value), className: 'w-full px-3 py-2 text-xs border rounded-xl', required: true }),
+              e('button', { type: 'submit', className: 'w-full py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs' }, '관리자 로그인')
+            )
+          )
+        ),
+
+        // 보고서 작성 모달
+        activeReportModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 overflow-y-auto' },
+          e('div', { className: 'bg-white rounded-3xl p-6 max-w-2xl w-full space-y-4 shadow-2xl my-8' },
+            e('div', { className: 'flex justify-between items-center pb-2 border-b' },
+              e('h3', { className: 'text-base font-black' }, `${reportForm.slot === 'report1' ? '과제 1번' : '과제 2번'} 탐구 보고서 작성`),
+              e('button', { onClick: () => setActiveReportModal(false) }, e('i', { className: 'fa-solid fa-xmark text-lg' }))
+            ),
+            e('div', { className: 'space-y-3 text-xs' },
+              e('input', { type: 'text', placeholder: '탐구 주제', value: reportForm.topicTitle, onChange: (ev) => setReportForm({ ...reportForm, topicTitle: ev.target.value }), className: 'w-full p-2.5 border rounded-xl font-bold' }),
+              e('input', { type: 'text', placeholder: '핵심 개념', value: reportForm.coreConcept, onChange: (ev) => setReportForm({ ...reportForm, coreConcept: ev.target.value }), className: 'w-full p-2.5 border rounded-xl' }),
+              e('textarea', { rows: 3, placeholder: '1. 문헌 및 이론 탐구 내용', value: reportForm.mainContent, onChange: (ev) => setReportForm({ ...reportForm, mainContent: ev.target.value }), className: 'w-full p-2.5 border rounded-xl' }),
+              e('textarea', { rows: 3, placeholder: '2. 실험·활동 절차 및 결과', value: reportForm.activityOrPlan, onChange: (ev) => setReportForm({ ...reportForm, activityOrPlan: ev.target.value }), className: 'w-full p-2.5 border rounded-xl' }),
+              e('div', { className: 'p-3 bg-purple-50 rounded-xl space-y-2' },
+                e('p', { className: 'font-bold text-purple-900' }, 'AI 활용 내역 기록'),
+                e('input', { type: 'text', placeholder: 'AI에게 입력한 질문(프롬프트)', value: reportForm.aiLog.prompt, onChange: (ev) => setReportForm({ ...reportForm, aiLog: { ...reportForm.aiLog, prompt: ev.target.value } }), className: 'w-full p-2 border rounded-lg bg-white' }),
+                e('textarea', { rows: 2, placeholder: '학생의 비판적 검증 및 보완점', value: reportForm.aiLog.criticalReview, onChange: (ev) => setReportForm({ ...reportForm, aiLog: { ...reportForm.aiLog, criticalReview: ev.target.value } }), className: 'w-full p-2 border rounded-lg bg-white' })
+              )
+            ),
+            e('div', { className: 'flex justify-end gap-2 pt-2' },
+              e('button', { onClick: () => saveReport(false), className: 'px-4 py-2 border rounded-xl text-xs font-bold' }, '임시 저장'),
+              e('button', { onClick: () => saveReport(true), className: 'px-5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold' }, '최종 제출')
+            )
+          )
+        )
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+  </script>
+</body>
+</html>
