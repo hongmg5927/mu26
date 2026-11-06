@@ -420,13 +420,14 @@
         showToast('수행평가 4대 주제 및 안내 설명이 저장되었습니다! 📝');
       };
 
-      // 주제별 맞춤 모달 열기 핸들러
+      // 주제별 맞춤 모달 열기 핸들러 (교사 관리자 모드에서도 점검 및 시뮬레이션 가능)
       const openReportModal = (categoryType, item = null, defaultSlot = null) => {
-        if (!currentUser || currentUser.role !== 'student') {
-          showToast('학생 로그인 후 작성할 수 있습니다.');
+        if (!currentUser) {
+          showToast('로그인 후 점검 및 작성을 진행할 수 있습니다.');
           return;
         }
-        const sData = allSubmissions[currentUser.id] || { reports: {} };
+        const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
+        const sData = allSubmissions[userKey] || { reports: {} };
         const slot = defaultSlot || (!sData.reports?.report1 ? 'report1' : 'report2');
         const ex = sData.reports?.[slot];
 
@@ -438,7 +439,7 @@
           // 주제 1
           coreConcept: ex?.coreConcept || item?.concept || '',
           hypothesis: ex?.hypothesis || item?.hypothesis || '',
-          variables: ex?.variables || item?.variables || '',
+          variables: ex?.variables || (item?.variables ? (typeof item.variables === 'string' ? item.variables : `독립변인: ${item.variables.independent || ''} / 종속변인: ${item.variables.dependent || ''} / 통제변인: ${item.variables.controlled || ''}`) : ''),
           procedure: ex?.procedure || item?.activity || '',
           conclusion: ex?.conclusion || '',
           // 주제 2
@@ -466,11 +467,13 @@
       };
 
       const saveReport = (isSubmit) => {
-        const sData = allSubmissions[currentUser.id] || { studentId: currentUser.id, studentName: currentUser.name, reports: {} };
+        const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
+        const userName = currentUser.role === 'teacher' ? '교사(점검용)' : currentUser.name;
+        const sData = allSubmissions[userKey] || { studentId: userKey, studentName: userName, reports: {} };
         const now = new Date().toLocaleString('ko-KR');
         const up = {
           ...allSubmissions,
-          [currentUser.id]: {
+          [userKey]: {
             ...sData,
             reports: {
               ...sData.reports,
@@ -481,7 +484,10 @@
         setAllSubmissions(up);
         localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
         setActiveReportModal(false);
-        showToast(isSubmit ? '보고서가 최종 제출되었습니다! 🎉' : '임시 저장되었습니다. 💾');
+        showToast(currentUser.role === 'teacher' 
+          ? (isSubmit ? '[교사 점검] 보고서 최종 제출 시뮬레이션 완료! 🎉' : '[교사 점검] 임시 저장 완료! 💾')
+          : (isSubmit ? '보고서가 최종 제출되었습니다! 🎉' : '임시 저장되었습니다. 💾')
+        );
       };
 
       const resetAllData = () => {
@@ -971,8 +977,11 @@
           e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
             e('div', { className: 'p-5 border-b border-slate-200 flex items-start justify-between bg-slate-50' },
               e('div', null,
-                e('span', { className: 'text-2xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800' },
-                  reportForm.slot === 'report1' ? '과제 1번 슬롯' : '과제 2번 슬롯'
+                e('div', { className: 'flex items-center gap-2' },
+                  e('span', { className: 'text-2xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800' },
+                    reportForm.slot === 'report1' ? '과제 1번 슬롯' : '과제 2번 슬롯'
+                  ),
+                  currentUser?.role === 'teacher' && e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200' }, '교사 점검 모드')
                 ),
                 e('h3', { className: 'text-base sm:text-lg font-black text-slate-900 mt-1' }, '개인 탐구 보고서 작성 및 수정')
               ),
