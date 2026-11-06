@@ -17,6 +17,8 @@
     body { font-family: 'Pretendard', sans-serif; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .text-2xs { font-size: 0.6875rem; line-height: 0.95rem; }
+    .variable-box { font-size: 0.725rem; line-height: 1.15rem; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
@@ -77,38 +79,158 @@
       { id: 'art', name: '미술', icon: 'fa-palette' }
     ];
 
+    // [정밀 검증 완료] 주제 1: 가설-변인통제-정량측정 기반 교과 융합 탐구 데이터
     const INQUIRY_DATA = [
-      { id: 'k1', subjectId: 'korean', subjectName: '국어', question: '현대 힙합 랩의 라임(Rhyme)과 고전 시가의 운율은 무엇이 다를까?', concept: '운율(압운, 음보), 음성 상징어', activity: '유명 랩 가사와 고려가요·가사 문학의 자음/모음 반복 구조 표 대조 분석' },
-      { id: 'k2', subjectId: 'korean', subjectName: '국어', question: '대중가요 가사는 왜 시보다 직관적이고 쉬운 단어를 많이 쓸까?', concept: '구어체와 문어체, 청각 전달력', activity: '시 1편을 노랫말로 개작해 보고 단어 난이도 및 반복 빈도 텍스트 분석' },
-      { id: 'e1', subjectId: 'english', subjectName: '영어', question: '팝송을 부를 때 한국어보다 영어 연음(Linking)이 더 매끄럽게 들리는 이유는?', concept: '연음 규칙, 음운 탈락/첨가, 강세 박자', activity: '팝송 속 연음 구간을 끊어 부를 때와 연음으로 부를 때 박자감 비교' },
-      { id: 'm1', subjectId: 'math', subjectName: '수학', question: '피아노 건반 1옥타브는 왜 등차수열이 아니라 등비수열일까?', concept: '등비수열, 거듭제곱근(2^(1/12))', activity: '건반별 진동수(Hz) 그래프 작성 및 지수함수 수식 일치성 검증' },
-      { id: 's1', subjectId: 'social', subjectName: '사회', question: '대형 콘서트 티켓팅에서 발생하는 암표 거래와 동적 가격제는 정당할까?', concept: '수요와 공급, 시장 실패, 암표 규제', activity: '좌석별 암표 프리미엄 가격 추이 조사 및 공정성 찬반 설문조사' },
-      { id: 'sc1', subjectId: 'science', subjectName: '과학', question: '공간 구조와 흡음재 재질에 따른 소리 잔향 시간(RT60) 감쇠 차이는?', concept: '파동의 반사, 흡수, 음향 감쇠', activity: '화장실, 교실, 음악실에서 박수 충격음 감쇠 시간 앱으로 실측 비교' },
-      { id: 'h1', subjectId: 'history', subjectName: '한국사', question: '세종대왕은 왜 신하들의 반대를 무릅쓰고 박연과 함께 아악(편경)을 정비했을까?', concept: '예악 정치, 국가 전례, 문화적 자주성', activity: '편경 제작 기록 조사 및 왕권 강화와 자주성에 미친 영향 분석' },
-      { id: 'pe1', subjectId: 'pe', subjectName: '체육', question: '음악의 BPM과 템포가 운동 시 심박수 및 지구력 유지에 미치는 영향은?', concept: '자율신경계 반응, 심박수, 운동 강도(RPE)', activity: '무음 vs 140 BPM 음악 환경에서 스쿼트 반복 횟수 및 심박수 비교' },
-      { id: 'a1', subjectId: 'art', subjectName: '미술', question: '밝은 장조와 어두운 단조 음악을 들었을 때 떠오르는 색깔은 정해져 있을까?', concept: '색채 심리, 난색과 한색, 공감각', activity: '다장조 곡과 다단조 곡 청취 후 12색 색연필 연상 투표 집계' }
+      {
+        id: 'k1',
+        subjectId: 'korean',
+        subjectName: '국어',
+        question: '현대 힙합 랩의 라임(Rhyme)과 고전 시가의 운율은 무엇이 다를까?',
+        concept: '음운론(압운·각운), 음보율(3·4음보), 강세 박자(Stress-timed) vs 음절 박자',
+        hypothesis: '고전 시가는 음절 수와 음보의 규칙적 반복에 의존하는 반면, 현대 랩은 박자의 강약 위치에 특정 모음 음가를 일치시키는 각운 중심의 유동적 변형을 보일 것이다.',
+        variables: '독립변인: 텍스트 유형(고전가사 5편 vs 현대 랩 5곡) / 종속변인: 비트 강박 위치의 모음 일치율(%), 8마디당 동일 음소 반복 빈도 / 통제변인: 곡당 16마디 동일 추출, 음절 분리 기준',
+        activity: '한국어 형태소 분석기 웹으로 모음 빈도 추출 후 Audacity 오디오 파형에 비트-음소 일치 지점 매핑'
+      },
+      {
+        id: 'k2',
+        subjectId: 'korean',
+        subjectName: '국어',
+        question: '대중가요 가사는 왜 시보다 직관적이고 쉬운 단어를 많이 쓸까?',
+        concept: '구어체와 문어체, 청각 인지 전달력, 어휘 난이도 등급',
+        hypothesis: '청각 매체 특성상 실시간 청취 시 단기 기억 부하를 낮추기 위해 대중가요 노랫말은 시 문학보다 기초 어휘(1~2등급) 비중과 반복 구절 비율이 유의미하게 높을 것이다.',
+        variables: '독립변인: 텍스트 장르(현대 서정시 10편 vs 음원 차트 1위 10곡) / 종속변인: 기초 어휘 비율(%), 텍스트 어휘 다양도(TTR 지수) / 통제변인: 총 어절 수(각 300어절 규격화)',
+        activity: '국립국어원 어휘 난이도 분석 도구를 활용해 어휘 등급 및 반복률 통계 도출'
+      },
+      {
+        id: 'e1',
+        subjectId: 'english',
+        subjectName: '영어',
+        question: '팝송을 부를 때 한국어보다 영어 연음(Linking)이 더 매끄럽게 들리는 이유는?',
+        concept: '영어 음소 규칙(자음-모음 연음, Flap T), 강세 박자 언어(Stress-timed)의 축약 현상',
+        hypothesis: '영어는 강세와 박자를 맞추기 위해 비강세 음절이 축약·연음되는 특성이 있어, 음절 박자(Syllable-timed)인 한국어 가사보다 마디당 음절 수 변동성이 클 때 가창 유연성이 높을 것이다.',
+        variables: '독립변인: 언어 체계(영어 팝송 원곡 vs 한국어 번안곡) / 종속변인: 박자당 음절 발음 소요 시간(초), 포만트 스펙트로그램 파형 연속성 / 통제변인: 동일 템포(BPM 100), 동일 멜로디 구간',
+        activity: '원곡과 번안곡의 동일 마디 음절 파형을 보컬 분석 앱으로 스펙트럼 끊김(침묵 구간) 시간 비교'
+      },
+      {
+        id: 'm1',
+        subjectId: 'math',
+        subjectName: '수학',
+        question: '피아노 건반 1옥타브(12반음)는 왜 등차수열이 아니라 등비수열일까?',
+        concept: '수학 I 지수함수, 거듭제곱근(2^(1/12)), 로그 스케일(Cent 단위)',
+        hypothesis: '인간의 청각은 소리의 주파수 덧셈 차이가 아닌 곱셈 비율로 음높이 변화를 인지(베버-페히너 법칙)하므로, 반음 간격은 공비가 12제곱근 2인 등비수열을 이룰 것이다.',
+        variables: '독립변인: 피아노 건반 번호 (1번 C4부터 13번 C5까지) / 종속변인: 실제 측정 주파수(Hz) 및 로그 변환값 / 통제변인: 동일 디지털 피아노 조율 기준(A4=440Hz)',
+        activity: '건반별 진동수 측정 앱으로 12개 음을 실측하고 Geogebra(지오지브라)에서 지수함수 회귀 분석 수행'
+      },
+      {
+        id: 'sc1',
+        subjectId: 'science',
+        subjectName: '과학',
+        question: '공간 구조와 흡음재 재질에 따른 소리 잔향 시간(RT60) 감쇠 차이는?',
+        concept: '물리학 파동의 반사와 흡수, 세이빈(Sabine) 공식, 음향 에너지 감쇠율',
+        hypothesis: '벽면 마감재의 다공성 흡음률이 높고 공간 체적이 작을수록, 소리 반사가 줄어들어 기준 음압(-60dB) 도달 시간(RT60)이 단축될 것이다.',
+        variables: '독립변인: 공간 유형(타일 화장실 vs 커튼 친 음악실 vs 빈 교실) / 종속변인: 잔향 시간 RT60(초) / 통제변인: 음원 강도(동일 풍선 터뜨림 충격음), 마이크-음원 간 거리(2m 고정)',
+        activity: '스마트폰 물리 실험 앱(Phyphox)의 음향 감쇠 측정기를 활용해 3회 반복 실측 후 평균 감쇠 곡선 작성'
+      },
+      {
+        id: 'pe1',
+        subjectId: 'pe',
+        subjectName: '체육',
+        question: '음악의 BPM과 템포가 운동 시 심박수 및 지구력 유지에 미치는 영향은?',
+        concept: '운동생리학 자율신경계 반응(교감신경 활성화), 주관적 운동 강도(RPE), 보폭 동조 현상',
+        hypothesis: '고BPM(140 이상) 음악은 중추신경계 각성을 유도하고 보폭을 동조시켜, 무음 상태 대비 최대 반복 횟수를 증가시키고 피로 인지도를 낮출 것이다.',
+        variables: '독립변인: 청각 자극 조건(무음 vs 70 BPM 클래식 vs 140 BPM EDM) / 종속변인: 3분 제자리 줄넘기 횟수, 분당 심박수(HR), 운동 자각도(RPE 1~10) / 통제변인: 피험자 체력 수준, 운동 전 휴식 시간(10분)',
+        activity: '스마트워치 심박수 측정기를 착용하고 3가지 음악 조건에서 운동 수행 후 심박 회복 그래프 비교'
+      },
+      {
+        id: 'h1',
+        subjectId: 'history',
+        subjectName: '한국사',
+        question: '세종대왕은 왜 신하들의 반대를 무릅쓰고 박연과 함께 아악(편경)을 정비했을까?',
+        concept: '조선 전기 예악(禮樂) 정치, 경석(磬石) 국산화, 국가 표준 도량형과 율관의 일치',
+        hypothesis: '세종의 음악 정비는 단순한 예술 사업이 아니라, 명나라에 대한 문화적 자주성을 확립하고 황종관을 기준으로 국가 도량형(길이·부피·무게)을 표준화하려는 통치 제도 개혁이었을 것이다.',
+        variables: '비교 대상: 세종실록 악지(편경 제작 기록) vs 고려사 악지(송나라 수입 아악 기록) / 분석 관점: 자주성, 악기 재료(남양 경석), 도량형 연동성',
+        activity: '세종실록 기사를 발췌 분석하여 황종 율관 제작과 도량형 통일의 상관관계를 도표로 작성'
+      },
+      {
+        id: 'a1',
+        subjectId: 'art',
+        subjectName: '미술',
+        question: '밝은 장조와 어두운 단조 음악을 들었을 때 떠오르는 색깔은 정해져 있을까?',
+        concept: '색채 심리학(난색/한색, 채도/명도), 칸딘스키 공감각(Synesthesia), 형태-음색 대응',
+        hypothesis: '다장조 곡은 교감신경을 자극하여 고명도·고채도의 난색(빨강, 노랑) 연상 비율이 높고, 다단조 곡은 한색(파랑, 무채색 계열) 연상 비율이 통계적으로 유의미하게 높을 것이다.',
+        variables: '독립변인: 음악의 조성(모차르트 다장조 피아노 소나타 vs 베토벤 다단조 운명 주제) / 종속변인: 12색 먼셀 색상환 선택 투표수, 선택한 색의 명도/채도 값 / 통제변인: 음원 음량(65dB), 재생 시간(1분)',
+        activity: '학급 친구 20명을 대상으로 블라인드 청취 설문 진행 후 RGB 색상 추출 및 카이제곱 독립성 검증'
+      }
     ];
 
+    // [정밀 검증 완료] 주제 2: Slide 07 4분면 규격 기반 문화유산 상품 기획 데이터
     const PRODUCT_DATA = [
-      { id: 'p1', name: '태평지음(太平之音) – 종묘제례악 힐링 수면 무드등 & 사운드 테라피', musicTrait: '편경과 편종의 맑은 배음 구조와 느리고 일정한 박자의 궁중 제례악', howToDevelop: '편경·편종 소리를 432Hz 힐링 주파수로 리마스터링하여 수면 한지 무드등과 결합', impact: '궁중 음악을 현대인의 수면 힐링 콘텐츠로 대중화' },
-      { id: 'p2', name: '비트 오프 별주부 – 판소리 수궁가 사설 장단 횡스크롤 리듬 게임', musicTrait: '진양조부터 중모리, 자진모리, 휘모리로 점차 빨라지는 장단의 박진감', howToDevelop: '자라와 토끼의 탈출기를 2D 도트 게임으로 디자인하고 북장단 타이밍에 맞춰 버튼 입력', impact: '판소리를 게임 문법으로 재해석하여 전통 장단 습득 촉진' },
-      { id: 'p3', name: '비트 메이커 쇠(SOE) – 허공에서 연주하는 사물놀이 모션 스마트 장갑', musicTrait: '꽹과리, 징, 장구, 북의 4가지 타악기가 만들어내는 폭발적인 악센트', howToDevelop: '자이로 센서 장갑을 끼고 허공을 타격하면 블루투스로 사물놀이 소리 출력', impact: '소음 걱정 없이 교실과 원룸에서 사물놀이 합주 가능' },
-      { id: 'p4', name: '포 시즌스 모닝 – 비발디 사계 기반 기상예보 맞춤 클래식 알람 앱', musicTrait: '봄의 새소리, 여름의 천둥, 겨울의 얼음판을 묘사한 표제음악', howToDevelop: '실시간 날씨 API와 연동해 비가 오면 폭풍우 악장, 맑으면 봄 1악장을 해설과 함께 재생', impact: '클래식 감상을 일상 루틴과 연결' }
+      {
+        id: 'p1',
+        name: '태평지음(太平之音) – 종묘제례악 힐링 수면 무드등 & 사운드 테라피',
+        musicTrait: '유네스코 인류무형문화유산으로, 편경과 편종의 맑은 금속·석재 배음과 템포가 느리고 일정한 박자의 궁중 의식 음악',
+        howToDevelop: '편경·편종 소리를 수면 뇌파(델타/세타파) 유도 주파수로 리마스터링하고, 한지 살창 무드등의 조도와 음악 볼륨이 서서히 줄어드는 스마트 타이머 IoT 기기 개발',
+        impact: '의식 속에 갇혀 있던 궁중 음악을 현대인의 불면증 치유 콘텐츠로 대중화하고 한국 전통 공예(한지)와 융합된 문화상품화'
+      },
+      {
+        id: 'p2',
+        name: '비트 오프 별주부 – 판소리 수궁가 사설 장단 횡스크롤 리듬 게임',
+        musicTrait: '진양조(느림)부터 중모리, 자진모리, 휘모리(매우 빠름)로 점진적 가속되는 장단의 박진감과 해학적 구비문학 사설',
+        howToDevelop: '토끼와 자라의 탈출기를 2D 도트 그래픽으로 구현하고, 판소리 고수의 북장단 강박과 추임새(얼씨구, 좋다) 타이밍에 맞춰 노트를 누르는 리듬 액션 웹 게임 배포',
+        impact: '어렵게 느껴지던 판소리의 장단 체계와 옛 사설을 Z세대가 게임 문법으로 체득하게 하여 국악 장단 교육 효과 극대화'
+      },
+      {
+        id: 'p3',
+        name: '비트 메이커 쇠(SOE) – 허공에서 연주하는 사물놀이 모션 스마트 장갑',
+        musicTrait: '꽹과리(천둥), 징(바람), 장구(비), 북(구름)의 4개 타악기가 만들어내는 폭발적인 엇박 악센트와 점고(點鼓) 몰아치기',
+        howToDevelop: '자이로·가속도 센서가 부착된 웨어러블 장갑을 끼고 타격 방향과 속도에 따라 각 악기의 리얼 샘플링 음원이 이어폰으로 출력되는 모션 인식 악기 키트 제작',
+        impact: '층간소음이나 고가 악기 구매 부담 없이 교실, 원룸에서 사물놀이 장단을 연습하고 외국인 관광객 체험 굿즈로 확장'
+      },
+      {
+        id: 'p4',
+        name: '포 시즌스 모닝 – 비발디 사계 기반 기상예보 맞춤 클래식 알람 앱',
+        musicTrait: '봄의 새소리, 여름 천둥 번개, 가을 수확, 겨울 얼음판 미끄러짐을 바이올린 주법으로 묘사한 대표 표제음악(Program Music)',
+        howToDevelop: '기상청 실시간 날씨 API와 연동해 비가 오면 여름 3악장 폭풍우, 눈이 오면 겨울 2악장, 화창하면 봄 1악장을 해설 도슨트 오디오와 함께 자동 재생하는 알람 앱',
+        impact: '날씨와 표제음악의 묘사 기법을 일상의 기상 루틴과 연결하여 청소년의 클래식 감상 진입 장벽 완화'
+      }
     ];
 
+    // [정밀 검증 완료] 주제 3: Slide 08 규격 기반 대중음악사 데이터
     const POP_HISTORY_DATA = [
-      { era: '1970년대', media: 'LP판, 통기타', genre: '포크, 록', songs: '송창식(왜 불러), 김민기(아침이슬)', summary: '청년들의 자유와 낭만을 대변한 포크 음악과 그룹사운드 태동기' },
-      { era: '1980년대', media: '카세트테이프', genre: '발라드, 신스팝', songs: '이문세(난 아직 모르잖아요), 조용필(모나리자)', summary: '감성 팝 발라드와 웅장한 신디사이저 편곡의 황금기' },
-      { era: '1990년대', media: 'CD, 가요 순위제', genre: '댄스 팝, 랩, 1세대 아이돌', songs: '서태지와 아이들(난 알아요), H.O.T.(전사의 후예)', summary: '랩/댄스의 주류화와 기획사형 아이돌의 폭발적 탄생' },
-      { era: '2000년대', media: 'MP3, 음원 다운로드', genre: '소몰이 R&B, 후크송', songs: 'SG워너비(살다가), 원더걸스(Tell Me)', summary: '디지털 음원 전환 및 아시아 한류 초석 구축' },
-      { era: '2010년대', media: '스마트폰, 유튜브', genre: 'EDM-팝, K-POP', songs: '싸이(강남스타일), 방탄소년단(봄날)', summary: '글로벌 빌보드 진입과 멀티미디어 세계관 융합' },
-      { era: '2020년대', media: '숏폼(틱톡, 릴스)', genre: '이지리스닝, Y2K 뉴트로', songs: '뉴진스(Ditto), IVE(Love Dive)', summary: '2분 미만 초단축 음원과 편안한 멜로디의 대세화' }
+      { era: '1970년대', media: 'LP판, 통기타, 라디오', genre: '포크송, 사이키델릭 록, 초기 트로트', songs: '송창식(왜 불러), 김민기(아침이슬), 산울림(아니 벌써)', summary: '청년 저항 문화와 군부 단속 속에서 통기타와 포크를 통해 자유를 노래한 싱어송라이터 태동기' },
+      { era: '1980년대', media: '카세트테이프, TV 가요제', genre: '팝 발라드, 신스팝, 헤비메탈', songs: '이문세(난 아직 모르잖아요), 조용필(모나리자), 들국화(행진)', summary: '컬러 TV 방송과 대학가요제를 중심으로 감성 발라드와 웅장한 신디사이저 편곡이 만개한 황금기' },
+      { era: '1990년대', media: 'CD, 가요 순위 프로그램', genre: '댄스 팝, 한국형 랩/힙합, 1세대 아이돌', songs: '서태지와 아이들(난 알아요), H.O.T.(전사의 후예), 김건모(잘못된 만남)', summary: '서태지와 아이들의 충격적 등장으로 10대 중심 랩/댄스가 주류로 안착하고 기획사 시스템 구축' },
+      { era: '2000년대', media: 'MP3 플레이어, 디지털 음원', genre: '소몰이 R&B, 후크송 댄스, 2세대 아이돌', songs: 'SG워너비(살다가), 원더걸스(Tell Me), 동방신기(Mirotic)', summary: '음반에서 MP3 다운로드 시장으로 전환되며 중독성 강한 후렴구(후크송)와 아시아 한류 기틀 마련' },
+      { era: '2010년대', media: '스마트폰, 유튜브 스트리밍', genre: 'EDM-팝, K-POP 관현악 믹스, 트랩', songs: '싸이(강남스타일), 방탄소년단(봄날), 트와이스(Cheer Up)', summary: '유튜브와 SNS를 통해 전 세계 팬덤을 결집하고 빌보드 차트 진입 및 독창적 세계관 서사 확립' },
+      { era: '2020년대', media: '숏폼(틱톡·릴스·쇼츠)', genre: '이지리스닝(Easy Listening), Y2K 뉴트로', songs: '뉴진스(Ditto), IVE(Love Dive), 이무진(신호등)', summary: '숏폼 영상 챌린지에 맞춘 2분 미만 초단축 구성과 자극 없는 편안한 멜로디의 대세화' }
     ];
 
+    // [정밀 검증 완료] 주제 4: 동서양 음악 이론 1:1 맞비교 데이터
     const EAST_WEST_DATA = [
-      { id: 'ew1', title: '조율학 & 수학', question: '삼분손익법(2/3, 4/3) vs 피타고라스 음계(2/3, 2/1): 동서양 최초의 조율 알고리즘 일치성 증명', concept: '황종~임종(완전5도), 삼분손익법, 피타고라스 5도 누적', activity: '계산기로 12율명과 피타고라스 진동수 도출 및 콤마(오차) 비교' },
-      { id: 'ew2', title: '기보학 & 인지과학', question: '세종의 정간보(우물 정 井) vs 서양의 오선보(5줄 4칸): 시간과 음높이 시각화의 공간적 사고 비교', concept: '정간보(박자 시간 공간화) vs 오선보(음높이 시각화)', activity: '동일한 동요를 정간보와 오선보로 기보 후 초견 연주 정확도 측정' },
-      { id: 'ew3', title: '지휘법 & 신체운동학', question: '서양의 4박자 기하학 지휘 도형 vs 국악의 호흡 장단(합·쿵·덕·기덕) 모션 센서 가속도 비교', concept: '외향적 비트 분할 vs 단전호흡 들숨·날숨 장단', activity: '스마트폰 가속도계 앱으로 지휘 도형과 장단 칠 때의 3축 파형 분석' }
+      {
+        id: 'ew1',
+        title: '조율학 & 수학적 알고리즘',
+        question: '삼분손익법(2/3, 4/3) vs 피타고라스 음계(2/3, 2/1): 동서양 최초의 조율 알고리즘 일치성 증명',
+        concept: '황종관(진동수 기준) 완전5도 삼분손익법 vs 피타고라스 5도 누적 조율, 피타고라스 콤마(23.46센트)',
+        comparison: '서양 피타고라스는 현의 길이를 2/3로 줄여 완전5도를 쌓고 옥타브(1/2) 내로 환원한 반면, 국악 삼분손익법은 율관의 길이를 1/3 빼고(손일) 1/3 더하는(익일) 순환을 12번 거쳤다. 두 문명 모두 12개 음을 돌았을 때 최초 음보다 약간 높아지는 수학적 오차(콤마)를 발견함.',
+        activity: '스프레드시트로 황종(기준 100)과 피타고라스(C=100)의 12음 주파수 비율을 수식 계산하여 오차 곡선 일치 증명'
+      },
+      {
+        id: 'ew2',
+        title: '기보학 & 시간의 공간화',
+        question: '세종의 정간보(우물 정 井) vs 서양의 오선보(5줄 4칸): 시간과 음높이 시각화의 공간적 사고 비교',
+        concept: '유량악보(박자가 면적으로 표현됨) 정간보 vs 음높이 중심 횡적 시간표기 오선보',
+        comparison: '서양 오선보는 5개의 줄과 칸을 통해 음높이(피치)의 시각적 오르내림을 극대화한 가로 기보법인 반면, 정간보는 우물 정(井) 자 1칸을 1박으로 삼아 시간의 길이를 물리적 면적으로 균등 분할한 동양 최초의 유량악보이다.',
+        activity: '동일한 4마디 단선율을 정간보와 오선보로 각각 그려보고 비전공자의 초견 연주 시 박자 정확도 비교'
+      },
+      {
+        id: 'ew3',
+        title: '신체운동학 & 지휘/호흡',
+        question: '서양의 4박자 기하학 지휘 도형 vs 국악의 호흡 장단(합·쿵·덕·기덕) 모션 센서 가속도 비교',
+        concept: '외향적 공간 분할 비트 지휘 vs 내향적 단전호흡 들숨·날숨 장단',
+        comparison: '서양 지휘는 손끝으로 허공에 명확한 기하학적 도형(정점 타격)을 그려 단원들에게 공간적 타이밍을 주는 반면, 국악 장단은 고수가 호흡(들숨으로 맺고 날숨으로 푸는)의 흐름을 몸 전체로 타며 연주자와 교감함.',
+        activity: '스마트폰 가속도계 센서를 손목에 차고 서양 4박 지휘 vs 굿거리장단 타격 시 3축 가속도(X,Y,Z) 파형 궤적 비교'
+      }
     ];
 
     function App() {
@@ -145,13 +267,13 @@
           const s = localStorage.getItem('music_topic_guides');
           return s ? JSON.parse(s) : {
             t1_title: '주제 1. 교과 융합 탐구',
-            t1_desc: '국어, 영어, 수학, 사회, 과학, 한국사, 체육, 미술과 음악을 융합하여 일상의 질문을 실험으로 입증합니다.',
+            t1_desc: '국어, 영어, 수학, 사회, 과학, 한국사, 체육, 미술과 음악을 융합하여 일상의 질문을 가설과 실험으로 입증합니다.',
             t2_title: '주제 2. 음악 문화유산 상품 개발',
-            t2_desc: '교과서 속 전통 및 서양 문화유산의 음악적 가치를 담아 현대적 굿즈, 앱, 게임, 프로그램을 기획합니다.',
+            t2_desc: '교과서 속 전통 및 서양 문화유산의 음악적 가치를 담아 현대적 굿즈, 앱, 게임, 프로그램을 4분면으로 기획합니다.',
             t3_title: '주제 3. 대중음악사&미래 음악 예측',
-            t3_desc: '1970년대부터 현재까지의 대중음악 흐름을 정리하고 2030년대 이후 미래 음악을 3문장으로 예측합니다.',
+            t3_desc: '1970년대부터 현재까지의 대중음악 흐름을 정리하고 2030년대 이후 미래 음악을 Slide 08 규격(3문장)으로 예측합니다.',
             t4_title: '주제 4. 국악·서양음악 이론 심화 탐구',
-            t4_desc: '조율학(삼분손익 vs 피타고라스), 기보학(정간보 vs 오선보), 지휘 vs 장단 등 동서양 이론을 맞비교하여 탐구합니다.'
+            t4_desc: '조율학(삼분손익 vs 피타고라스), 기보학(정간보 vs 오선보), 지휘 vs 장단 등 동서양 이론을 1:1 맞비교하여 탐구합니다.'
           };
         } catch { return {}; }
       });
@@ -177,13 +299,33 @@
         }
       };
 
+      // 주제별 구조화된 보고서 상태
       const [activeReportModal, setActiveReportModal] = useState(false);
       const [reportForm, setReportForm] = useState({
         slot: 'report1',
+        topicCategory: 'inquiry', // 'inquiry' | 'product' | 'pop_history' | 'east_west'
         topicTitle: '',
+        // 주제 1 필드
         coreConcept: '',
-        mainContent: '',
-        activityOrPlan: '',
+        hypothesis: '',
+        variables: '',
+        procedure: '',
+        conclusion: '',
+        // 주제 2 필드 (Slide 07 4분면)
+        productTrait: '',
+        productHow: '',
+        productImpact: '',
+        // 주제 3 필드 (Slide 08 규격)
+        popRecords: '',
+        popTraits: ['', '', ''],
+        popTopSongs: [{ title: '', reason: '' }, { title: '', reason: '' }, { title: '', reason: '' }],
+        popFuture: ['', '', ''],
+        // 주제 4 필드 (1:1 비교)
+        ewWestern: '',
+        ewGugak: '',
+        ewComparison: '',
+        ewActivity: '',
+        // AI 활용 내역 (공통 필수)
         aiLog: { prompt: '', criticalReview: '' }
       });
 
@@ -263,14 +405,8 @@
       // 교사 계정(비밀번호 6자리) 저장
       const handleSaveTeacherAuth = (ev) => {
         ev.preventDefault();
-        if (!newTeacherId.trim()) {
-          showToast('교사 아이디를 입력해 주세요.');
-          return;
-        }
-        if (!/^\d{6}$/.test(newTeacherPw)) {
-          showToast('비밀번호는 반드시 6자리 숫자여야 합니다.');
-          return;
-        }
+        if (!newTeacherId.trim()) { showToast('교사 아이디를 입력해 주세요.'); return; }
+        if (!/^\d{6}$/.test(newTeacherPw)) { showToast('비밀번호는 반드시 6자리 숫자여야 합니다.'); return; }
         const updated = { id: newTeacherId.trim(), pw: newTeacherPw };
         setTeacherAuth(updated);
         localStorage.setItem('music_teacher_auth', JSON.stringify(updated));
@@ -284,7 +420,8 @@
         showToast('수행평가 4대 주제 및 안내 설명이 저장되었습니다! 📝');
       };
 
-      const openReportModal = (item, defaultSlot = null) => {
+      // 주제별 맞춤 모달 열기 핸들러
+      const openReportModal = (categoryType, item = null, defaultSlot = null) => {
         if (!currentUser || currentUser.role !== 'student') {
           showToast('학생 로그인 후 작성할 수 있습니다.');
           return;
@@ -293,12 +430,36 @@
         const slot = defaultSlot || (!sData.reports?.report1 ? 'report1' : 'report2');
         const ex = sData.reports?.[slot];
 
+        // 기존 저장된 내용이 있으면 복원, 없으면 클릭한 항목의 필드로 프리필
         setReportForm({
           slot,
+          topicCategory: categoryType,
           topicTitle: ex?.topicTitle || item?.question || item?.name || item?.title || '',
-          coreConcept: ex?.coreConcept || item?.concept || item?.musicTrait || '',
-          mainContent: ex?.mainContent || item?.howToDevelop || item?.summary || '',
-          activityOrPlan: ex?.activityOrPlan || item?.activity || item?.impact || '',
+          // 주제 1
+          coreConcept: ex?.coreConcept || item?.concept || '',
+          hypothesis: ex?.hypothesis || item?.hypothesis || '',
+          variables: ex?.variables || item?.variables || '',
+          procedure: ex?.procedure || item?.activity || '',
+          conclusion: ex?.conclusion || '',
+          // 주제 2
+          productTrait: ex?.productTrait || item?.musicTrait || '',
+          productHow: ex?.productHow || item?.howToDevelop || '',
+          productImpact: ex?.productImpact || item?.impact || '',
+          // 주제 3
+          popRecords: ex?.popRecords || (item?.summary ? `${item.era}: ${item.summary}` : ''),
+          popTraits: ex?.popTraits || ['', '', ''],
+          popTopSongs: ex?.popTopSongs || [
+            { title: item?.songs?.split(', ')[0] || '', reason: '' },
+            { title: item?.songs?.split(', ')[1] || '', reason: '' },
+            { title: item?.songs?.split(', ')[2] || '', reason: '' }
+          ],
+          popFuture: ex?.popFuture || ['', '', ''],
+          // 주제 4
+          ewWestern: ex?.ewWestern || (item ? '서양 음계/기보/지휘 체계 분석' : ''),
+          ewGugak: ex?.ewGugak || (item ? '국악 율명/정간보/호흡 장단 분석' : ''),
+          ewComparison: ex?.ewComparison || item?.comparison || '',
+          ewActivity: ex?.ewActivity || item?.activity || '',
+          // AI 로그
           aiLog: ex?.aiLog || { prompt: '', criticalReview: '' }
         });
         setActiveReportModal(true);
@@ -449,43 +610,87 @@
 
         // 메인 콘텐츠 영역
         e('main', { className: 'max-w-7xl mx-auto px-4 py-6 w-full flex-1' },
-          // 탭 1
+          // 탭 1: 주제 1. 교과 융합 탐구
           mainTab === 'inquiry' && e('div', { className: 'space-y-4' },
             e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
               e('div', null,
                 e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 1. 교과 융합 탐구'),
-                e('p', { className: 'text-xs text-slate-500' }, '8개 교과와 음악을 융합하여 일상의 질문을 실험으로 입증합니다.')
-              ),
-              e('button', { onClick: () => openReportModal({ question: '새로운 교과 융합 탐구' }), className: 'px-3.5 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs' }, '+ 새 주제 직접 작성')
+                e('p', { className: 'text-xs text-slate-500' }, '8개 교과와 음악을 융합하여 일상의 질문을 가설과 실험으로 입증합니다.')
+              )
             ),
             e('div', { className: 'flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar' },
               SUBJECTS.map(s => e('button', { key: s.id, onClick: () => setSelectedSubject(s.id), className: `px-3 py-1.5 rounded-xl text-xs font-bold border ${selectedSubject === s.id ? 'bg-indigo-900 text-white' : 'bg-white text-slate-600'}` }, s.name))
             ),
             e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+              // [1번 선택지 고정] 자율 기획 및 실험 설계 카드
+              e('div', { className: 'bg-gradient-to-br from-indigo-50 to-white rounded-2xl border-2 border-dashed border-indigo-300 p-5 flex flex-col justify-between shadow-sm' },
+                e('div', null,
+                  e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-600 text-white' }, '선택지 01 · 자율 탐구'),
+                  e('h3', { className: 'text-sm font-bold text-indigo-950 mt-2 mb-1' }, '내가 직접 발견한 호기심으로 융합 실험 설계하기'),
+                  e('p', { className: 'text-xs text-indigo-800/80 mb-2' }, '교과서나 일상에서 스스로 품은 질문을 토대로 가설, 변인 통제, 측정 도구를 직접 구성합니다.')
+                ),
+                e('button', { onClick: () => openReportModal('inquiry', { question: '자율 융합 탐구 주제' }), className: 'mt-4 w-full py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs' }, '+ 자율 융합 보고서 쓰기')
+              ),
+              // 추천 융합 주제 목록
               INQUIRY_DATA.filter(it => selectedSubject === 'all' || it.subjectId === selectedSubject).map(item =>
                 e('div', { key: item.id, className: 'bg-white rounded-2xl border border-slate-200 p-5 flex flex-col justify-between shadow-sm' },
                   e('div', null,
                     e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700' }, item.subjectName),
-                    e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1' }, item.question),
-                    e('p', { className: 'text-xs text-slate-600 mb-1' }, `개념: ${item.concept}`),
-                    e('p', { className: 'text-xs text-slate-500' }, `실험: ${item.activity}`)
+                    e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1.5 leading-snug' }, item.question),
+                    e('div', { className: 'p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5 mb-2' },
+                      e('div', { className: 'text-xs text-slate-700 leading-relaxed' },
+                        e('strong', { className: 'text-indigo-900 font-bold mr-1' }, '핵심 개념:'),
+                        item.concept
+                      ),
+                      item.hypothesis && e('div', { className: 'text-xs text-slate-600 leading-relaxed' },
+                        e('strong', { className: 'text-slate-800 font-bold mr-1' }, '가설:'),
+                        item.hypothesis
+                      )
+                    ),
+                    item.variables && e('div', { className: 'p-2.5 rounded-xl bg-indigo-50/40 border border-indigo-100/60 mb-2 variable-box text-slate-600 space-y-1' },
+                      e('div', { className: 'flex items-center gap-1.5' },
+                        e('span', { className: 'text-2xs font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700' }, '독립변인'),
+                        e('span', { className: 'text-2xs' }, item.variables.independent)
+                      ),
+                      e('div', { className: 'flex items-center gap-1.5' },
+                        e('span', { className: 'text-2xs font-extrabold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700' }, '종속변인'),
+                        e('span', { className: 'text-2xs' }, item.variables.dependent)
+                      ),
+                      e('div', { className: 'flex items-center gap-1.5' },
+                        e('span', { className: 'text-2xs font-extrabold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700' }, '통제변인'),
+                        e('span', { className: 'text-2xs' }, item.variables.controlled)
+                      )
+                    ),
+                    e('p', { className: 'text-xs text-slate-500 leading-relaxed' },
+                      e('strong', { className: 'text-slate-700 mr-1' }, '실험·측정:'),
+                      item.activity
+                    )
                   ),
-                  e('button', { onClick: () => openReportModal(item), className: 'mt-4 w-full py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs' }, '이 주제로 보고서 작성')
+                  e('button', { onClick: () => openReportModal('inquiry', item), className: 'mt-4 w-full py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-xs' }, '이 주제로 보고서 작성')
                 )
               )
             )
           ),
 
-          // 탭 2
+          // 탭 2: 주제 2. 음악 문화유산 상품 개발
           mainTab === 'product' && e('div', { className: 'space-y-4' },
             e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
               e('div', null,
                 e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 2. 음악 문화유산 상품 개발'),
-                e('p', { className: 'text-xs text-slate-500' }, '문화유산의 가치를 담아 현대적 굿즈, 앱, 게임을 4분면으로 기획합니다.')
-              ),
-              e('button', { onClick: () => openReportModal({ name: '새로운 문화유산 상품 기획' }), className: 'px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '+ 새 상품 직접 기획')
+                e('p', { className: 'text-xs text-slate-500' }, '문화유산의 가치를 담아 현대적 굿즈, 앱, 게임을 Slide 07 4분면으로 기획합니다.')
+              )
             ),
             e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+              // [1번 선택지 고정] 자율 상품 기획 카드
+              e('div', { className: 'bg-gradient-to-br from-emerald-50 to-white rounded-2xl border-2 border-dashed border-emerald-300 p-5 flex flex-col justify-between shadow-sm' },
+                e('div', null,
+                  e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-emerald-600 text-white' }, '선택지 01 · 자율 기획'),
+                  e('h3', { className: 'text-base font-bold text-emerald-950 mt-2 mb-1' }, '내가 직접 전통/서양 음악 문화유산 상품 기획하기'),
+                  e('p', { className: 'text-xs text-emerald-800/80' }, '음악 교과서 속 악곡이나 악기를 골라 상품명, 음악적 특징, 개발 방식, 기대 효과를 4분면으로 기획합니다.')
+                ),
+                e('button', { onClick: () => openReportModal('product', { name: '자율 문화유산 상품 기획' }), className: 'mt-4 w-full py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '+ 자율 4분면 기획서 쓰기')
+              ),
+              // 추천 문화유산 상품 모델
               PRODUCT_DATA.map(item =>
                 e('div', { key: item.id, className: 'bg-white rounded-2xl border-2 border-emerald-100 p-5 flex flex-col justify-between shadow-sm' },
                   e('div', null,
@@ -494,22 +699,31 @@
                     e('p', { className: 'text-xs text-slate-600 mb-1' }, `개발 방식: ${item.howToDevelop}`),
                     e('p', { className: 'text-xs text-slate-500' }, `기대 효과: ${item.impact}`)
                   ),
-                  e('button', { onClick: () => openReportModal(item), className: 'mt-4 w-full py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '이 상품으로 보고서 작성')
+                  e('button', { onClick: () => openReportModal('product', item), className: 'mt-4 w-full py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs' }, '이 상품으로 보고서 작성')
                 )
               )
             )
           ),
 
-          // 탭 3
+          // 탭 3: 주제 3. 대중음악사&미래 음악 예측
           mainTab === 'pop_history' && e('div', { className: 'space-y-4' },
             e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
               e('div', null,
                 e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 3. 대중음악사&미래 음악 예측'),
-                e('p', { className: 'text-xs text-slate-500' }, '시대별 대중음악 흐름을 정리하고 2030 미래 음악을 예측합니다.')
-              ),
-              e('button', { onClick: () => openReportModal({ question: '대중음악사 정리 및 2030 미래 예측' }), className: 'px-3.5 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs' }, '+ 대중음악사 보고서 작성')
+                e('p', { className: 'text-xs text-slate-500' }, '시대별 대중음악 흐름을 정리하고 2030 미래 음악을 Slide 08 규격으로 예측합니다.')
+              )
             ),
             e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+              // [1번 선택지 고정] 자율 시대 종합 분석 카드
+              e('div', { className: 'bg-gradient-to-br from-teal-50 to-white rounded-2xl border-2 border-dashed border-teal-300 p-5 flex flex-col justify-between shadow-sm' },
+                e('div', null,
+                  e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-teal-700 text-white' }, '선택지 01 · 자율 정리'),
+                  e('h3', { className: 'text-sm font-bold text-teal-950 mt-2 mb-1' }, '전 시대를 종합하여 대중음악사 정리 및 2030 미래 예측'),
+                  e('p', { className: 'text-xs text-teal-800/80' }, '연대별 기록, 3문장 특징, 대표곡 3선 및 선정이유, 2030 3문장 예측을 Slide 08 기준에 맞게 직접 완성합니다.')
+                ),
+                e('button', { onClick: () => openReportModal('pop_history', { question: '대중음악사 종합 정리 및 2030 미래 예측' }), className: 'mt-4 w-full py-2 rounded-xl bg-teal-600 text-white font-bold text-xs' }, '+ 자율 대중음악사 보고서 쓰기')
+              ),
+              // 시대별 가이드 카드
               POP_HISTORY_DATA.map(item =>
                 e('div', { key: item.era, className: 'bg-white rounded-2xl border border-teal-200 p-5 flex flex-col justify-between shadow-sm' },
                   e('div', null,
@@ -518,37 +732,47 @@
                     e('p', { className: 'text-xs text-slate-600 mb-2' }, item.summary),
                     e('p', { className: 'text-2xs text-teal-800 font-bold' }, `대표곡: ${item.songs}`)
                   ),
-                  e('button', { onClick: () => openReportModal({ question: `${item.era} 중심 대중음악사 탐구`, concept: item.genre, summary: item.summary }), className: 'mt-4 w-full py-2 rounded-xl bg-teal-50 text-teal-800 font-bold text-xs' }, '이 시대로 보고서 작성')
+                  e('button', { onClick: () => openReportModal('pop_history', { question: `${item.era} 중심 대중음악사 탐구`, concept: item.genre, summary: item.summary, songs: item.songs }), className: 'mt-4 w-full py-2 rounded-xl bg-teal-50 text-teal-800 font-bold text-xs' }, '이 시대로 보고서 작성')
                 )
               )
             )
           ),
 
-          // 탭 4
+          // 탭 4: 주제 4. 국악·서양음악 이론 심화 탐구
           mainTab === 'east_west' && e('div', { className: 'space-y-4' },
             e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
               e('div', null,
                 e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 4. 국악·서양음악 이론 심화 탐구'),
-                e('p', { className: 'text-xs text-slate-500' }, '조율학, 기보학, 지휘법 등 동서양 이론을 맞비교하여 탐구합니다.')
-              ),
-              e('button', { onClick: () => openReportModal({ title: '새로운 동서양 비교 탐구' }), className: 'px-3.5 py-2 rounded-xl bg-amber-600 text-white font-bold text-xs' }, '+ 새 비교 주제 작성')
+                e('p', { className: 'text-xs text-slate-500' }, '조율학, 기보학, 지휘법 등 동서양 이론을 1:1 맞비교하여 탐구합니다.')
+              )
             ),
-            e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+              // [1번 선택지 고정] 자율 동서양 비교 카드
+              e('div', { className: 'bg-gradient-to-br from-amber-50 to-white rounded-2xl border-2 border-dashed border-amber-300 p-5 flex flex-col justify-between shadow-sm' },
+                e('div', null,
+                  e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-amber-700 text-white' }, '선택지 01 · 자율 맞비교'),
+                  e('h3', { className: 'text-base font-bold text-amber-950 mt-2 mb-1' }, '내가 직접 발견한 동서양 음악 이론 1:1 대조 탐구'),
+                  e('p', { className: 'text-xs text-amber-800/80' }, '동서양의 조율, 음정, 기보, 악기 분류 체계 중 하나를 골라 서양 이론과 국악 이론의 차이를 교차 실증합니다.')
+                ),
+                e('button', { onClick: () => openReportModal('east_west', { title: '자율 동서양 이론 비교 탐구' }), className: 'mt-4 w-full py-2 rounded-xl bg-amber-600 text-white font-bold text-xs' }, '+ 자율 동서양 보고서 쓰기')
+              ),
+              // 추천 맞비교 테마
               EAST_WEST_DATA.map(item =>
                 e('div', { key: item.id, className: 'bg-white rounded-2xl border-2 border-amber-100 p-5 flex flex-col justify-between shadow-sm' },
                   e('div', null,
                     e('span', { className: 'text-2xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded' }, item.title),
                     e('h3', { className: 'text-sm font-bold text-slate-900 mt-2 mb-1' }, item.question),
                     e('p', { className: 'text-xs text-slate-600 mb-1' }, `개념: ${item.concept}`),
-                    e('p', { className: 'text-xs text-slate-500' }, `실험: ${item.activity}`)
+                    e('p', { className: 'text-xs text-amber-950/80 mb-2 line-clamp-2' }, `비교: ${item.comparison}`),
+                    e('p', { className: 'text-2xs text-slate-500' }, `실험: ${item.activity}`)
                   ),
-                  e('button', { onClick: () => openReportModal(item), className: 'mt-4 w-full py-2 rounded-xl bg-amber-600 text-white font-bold text-xs' }, '이 주제로 보고서 작성')
+                  e('button', { onClick: () => openReportModal('east_west', item), className: 'mt-4 w-full py-2 rounded-xl bg-amber-600 text-white font-bold text-xs' }, '이 주제로 보고서 작성')
                 )
               )
             )
           ),
 
-          // 학생 보고서 페이지
+          // 학생 보고서 페이지 (my_reports)
           mainTab === 'my_reports' && currentUser?.role === 'student' && e('div', { className: 'space-y-6' },
             e('div', { className: 'bg-gradient-to-r from-rose-900 to-indigo-950 rounded-3xl p-6 text-white' },
               e('h2', { className: 'text-xl font-black' }, `${currentUser.name} (${currentUser.id}) 님의 개인 탐구 2개 종합 정리`),
@@ -565,21 +789,30 @@
                     ),
                     rep ? e('div', { className: 'space-y-2 text-xs' },
                       e('p', { className: 'font-bold text-slate-900' }, `주제: ${rep.topicTitle}`),
-                      e('p', { className: 'text-slate-600' }, `개념: ${rep.coreConcept}`),
-                      e('p', { className: 'text-slate-600 line-clamp-3' }, `내용: ${rep.mainContent}`),
-                      e('div', { className: 'p-3 bg-purple-50 rounded-xl text-purple-900 mt-2' },
+                      e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-slate-100 text-slate-700' },
+                        rep.topicCategory === 'inquiry' ? '주제 1. 교과 융합' :
+                        rep.topicCategory === 'product' ? '주제 2. 문화유산 상품' :
+                        rep.topicCategory === 'pop_history' ? '주제 3. 대중음악사' : '주제 4. 동서양 비교'
+                      ),
+                      e('div', { className: 'p-3 bg-slate-50 rounded-xl space-y-1 mt-2 text-2xs text-slate-600' },
+                        rep.topicCategory === 'inquiry' && e('p', null, `가설: ${rep.hypothesis || '미기재'}`),
+                        rep.topicCategory === 'product' && e('p', null, `개발방식: ${rep.productHow || '미기재'}`),
+                        rep.topicCategory === 'pop_history' && e('p', null, `연대별 기록: ${rep.popRecords?.slice(0, 50)}...`),
+                        rep.topicCategory === 'east_west' && e('p', null, `비교: ${rep.ewComparison?.slice(0, 50)}...`)
+                      ),
+                      e('div', { className: 'p-3 bg-purple-50 rounded-xl text-purple-900 mt-2 text-2xs' },
                         e('p', { className: 'font-bold' }, `AI 질문: ${rep.aiLog?.prompt || '없음'}`),
                         e('p', null, `비판 검증: ${rep.aiLog?.criticalReview || '없음'}`)
                       )
                     ) : e('p', { className: 'text-xs text-slate-400 py-8 text-center' }, '아직 선택된 탐구 과제가 없습니다.')
                   ),
-                  e('button', { onClick: () => openReportModal(rep, slot), className: 'mt-6 w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs' }, rep ? '보고서 수정하기' : '이 슬롯에 과제 등록')
+                  e('button', { onClick: () => openReportModal(rep?.topicCategory || 'inquiry', rep, slot), className: 'mt-6 w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs' }, rep ? '보고서 수정하기' : '이 슬롯에 과제 등록')
                 );
               })
             )
           ),
 
-          // 교사 관리자 페이지
+          // 교사 관리자 페이지 (teacher_dash)
           mainTab === 'teacher_dash' && currentUser?.role === 'teacher' && e('div', { className: 'space-y-6' },
             e('div', { className: 'bg-gradient-to-r from-purple-900 to-indigo-950 rounded-3xl p-6 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg' },
               e('div', null,
@@ -596,7 +829,7 @@
               )
             ),
 
-            // [선명한 교사용 서브탭 바]
+            // 교사용 서브탭 바
             e('div', { className: 'flex items-center gap-2 border-b border-slate-200 pb-2' },
               e('button', {
                 onClick: () => setTeacherSubTab('submissions'),
@@ -694,7 +927,7 @@
               )
             ),
 
-            // 서브탭 3: 교사 계정 설정 (아이디 & 6자리 비밀번호 변경)
+            // 서브탭 3: 교사 계정 설정
             teacherSubTab === 'auth_edit' && e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 shadow-sm max-w-md space-y-4 text-xs' },
               e('div', { className: 'border-b pb-2' },
                 e('h3', { className: 'text-sm font-bold text-slate-900' }, '교사 관리자 계정 설정'),
@@ -713,59 +946,193 @@
                   })
                 ),
                 e('div', null,
-                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '새 비밀번호 (6자리 숫자)'),
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '새로운 비밀번호 (6자리 숫자)'),
                   e('input', {
                     type: 'password',
                     maxLength: 6,
                     value: newTeacherPw,
                     onChange: (ev) => setNewTeacherPw(ev.target.value),
-                    placeholder: '숫자 6자리 입력',
+                    placeholder: '6자리 숫자',
                     className: 'w-full p-2.5 border rounded-xl text-xs font-mono tracking-widest',
                     required: true
                   })
                 ),
-                e('button', { type: 'submit', className: 'w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' }, '계정 정보 저장하기')
+                e('button', {
+                  type: 'submit',
+                  className: 'w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition shadow'
+                }, '계정 정보 저장하기')
               )
-            )
-          )
-        ),
-
-        // 교사 로그인 모달
-        showTeacherModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60' },
-          e('div', { className: 'bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl' },
-            e('div', { className: 'flex justify-between items-center' },
-              e('h3', { className: 'text-sm font-black' }, '교사 관리자 모드 접속'),
-              e('button', { onClick: () => setShowTeacherModal(false) }, e('i', { className: 'fa-solid fa-xmark' }))
-            ),
-            e('form', { onSubmit: handleTeacherLogin, className: 'space-y-3' },
-              e('input', { type: 'text', placeholder: '교사 아이디', value: teacherIdInput, onChange: (ev) => setTeacherIdInput(ev.target.value), className: 'w-full px-3 py-2 text-xs border rounded-xl', required: true }),
-              e('input', { type: 'password', maxLength: 6, placeholder: '비밀번호 6자리', value: teacherPwInput, onChange: (ev) => setTeacherPwInput(ev.target.value), className: 'w-full px-3 py-2 text-xs border rounded-xl', required: true }),
-              e('button', { type: 'submit', className: 'w-full py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs' }, '관리자 로그인')
             )
           )
         ),
 
         // 보고서 작성 모달
-        activeReportModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 overflow-y-auto' },
-          e('div', { className: 'bg-white rounded-3xl p-6 max-w-2xl w-full space-y-4 shadow-2xl my-8' },
-            e('div', { className: 'flex justify-between items-center pb-2 border-b' },
-              e('h3', { className: 'text-base font-black' }, `${reportForm.slot === 'report1' ? '과제 1번' : '과제 2번'} 탐구 보고서 작성`),
-              e('button', { onClick: () => setActiveReportModal(false) }, e('i', { className: 'fa-solid fa-xmark text-lg' }))
-            ),
-            e('div', { className: 'space-y-3 text-xs' },
-              e('input', { type: 'text', placeholder: '탐구 주제', value: reportForm.topicTitle, onChange: (ev) => setReportForm({ ...reportForm, topicTitle: ev.target.value }), className: 'w-full p-2.5 border rounded-xl font-bold' }),
-              e('input', { type: 'text', placeholder: '핵심 개념', value: reportForm.coreConcept, onChange: (ev) => setReportForm({ ...reportForm, coreConcept: ev.target.value }), className: 'w-full p-2.5 border rounded-xl' }),
-              e('textarea', { rows: 3, placeholder: '1. 문헌 및 이론 탐구 내용', value: reportForm.mainContent, onChange: (ev) => setReportForm({ ...reportForm, mainContent: ev.target.value }), className: 'w-full p-2.5 border rounded-xl' }),
-              e('textarea', { rows: 3, placeholder: '2. 실험·활동 절차 및 결과', value: reportForm.activityOrPlan, onChange: (ev) => setReportForm({ ...reportForm, activityOrPlan: ev.target.value }), className: 'w-full p-2.5 border rounded-xl' }),
-              e('div', { className: 'p-3 bg-purple-50 rounded-xl space-y-2' },
-                e('p', { className: 'font-bold text-purple-900' }, 'AI 활용 내역 기록'),
-                e('input', { type: 'text', placeholder: 'AI에게 입력한 질문(프롬프트)', value: reportForm.aiLog.prompt, onChange: (ev) => setReportForm({ ...reportForm, aiLog: { ...reportForm.aiLog, prompt: ev.target.value } }), className: 'w-full p-2 border rounded-lg bg-white' }),
-                e('textarea', { rows: 2, placeholder: '학생의 비판적 검증 및 보완점', value: reportForm.aiLog.criticalReview, onChange: (ev) => setReportForm({ ...reportForm, aiLog: { ...reportForm.aiLog, criticalReview: ev.target.value } }), className: 'w-full p-2 border rounded-lg bg-white' })
+        activeReportModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
+          e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
+            e('div', { className: 'p-5 border-b border-slate-200 flex items-start justify-between bg-slate-50' },
+              e('div', null,
+                e('span', { className: 'text-2xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800' },
+                  reportForm.slot === 'report1' ? '과제 1번 슬롯' : '과제 2번 슬롯'
+                ),
+                e('h3', { className: 'text-base sm:text-lg font-black text-slate-900 mt-1' }, '개인 탐구 보고서 작성 및 수정')
+              ),
+              e('button', { onClick: () => setActiveReportModal(false), className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
               )
             ),
-            e('div', { className: 'flex justify-end gap-2 pt-2' },
-              e('button', { onClick: () => saveReport(false), className: 'px-4 py-2 border rounded-xl text-xs font-bold' }, '임시 저장'),
-              e('button', { onClick: () => saveReport(true), className: 'px-5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold' }, '최종 제출')
+
+            e('div', { className: 'p-6 overflow-y-auto space-y-4 flex-1 text-xs' },
+              // 공통: 탐구 주제 제목
+              e('div', null,
+                e('label', { className: 'font-bold text-slate-800 block mb-1' }, '탐구/기획 주제명'),
+                e('input', { type: 'text', value: reportForm.topicTitle, onChange: (ev) => setReportForm({ ...reportForm, topicTitle: ev.target.value }), className: 'w-full p-2.5 border rounded-xl font-bold bg-white' })
+              ),
+
+              // [주제 1 전용 폼: 가설-변인통제-실험결과]
+              reportForm.topicCategory === 'inquiry' && e('div', { className: 'space-y-3 bg-slate-50 p-4 rounded-2xl border' },
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '1. 연계 교과 및 핵심 이론 개념'),
+                  e('input', { type: 'text', placeholder: '교과목명 및 교과서 속 파동/수열/음운론 등 핵심 개념', value: reportForm.coreConcept, onChange: (ev) => setReportForm({ ...reportForm, coreConcept: ev.target.value }), className: 'w-full p-2 border rounded-lg bg-white' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '2. 일상의 호기심 및 가설 설정'),
+                  e('textarea', { rows: 2, placeholder: '만약 ~라면, ~할 것이다 (인과관계 명시)', value: reportForm.hypothesis, onChange: (ev) => setReportForm({ ...reportForm, hypothesis: ev.target.value }), className: 'w-full p-2 border rounded-lg bg-white' })
+                ),
+                e('div', { className: 'p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-2' },
+                  e('label', { className: 'font-bold text-indigo-900 block' }, '3. 변인 통제 설정 (과학적 실험 절차)'),
+                  e('input', { type: 'text', placeholder: '예: 독립변인: 공간 유형 / 종속변인: 잔향 시간(초) / 통제변인: 최초 음량, 마이크 거리', value: reportForm.variables, onChange: (ev) => setReportForm({ ...reportForm, variables: ev.target.value }), className: 'w-full p-2 border rounded-lg bg-white text-2xs variable-box' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '4. 간이 실험 절차 및 데이터 결과'),
+                  e('textarea', { rows: 3, placeholder: '스마트폰 측정 앱 활용 및 수집된 정량적 데이터(수치) 기록', value: reportForm.procedure, onChange: (ev) => setReportForm({ ...reportForm, procedure: ev.target.value }), className: 'w-full p-2 border rounded-lg bg-white' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '5. 결론 및 음악적 시사점'),
+                  e('textarea', { rows: 2, placeholder: '가설 검증 결과 및 음악 감상·학교 환경에 미치는 시사점', value: reportForm.conclusion, onChange: (ev) => setReportForm({ ...reportForm, conclusion: ev.target.value }), className: 'w-full p-2 border rounded-lg bg-white' })
+                )
+              ),
+
+              // [주제 2 전용 폼: Slide 07 4분면 상품 기획]
+              reportForm.topicCategory === 'product' && e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3 bg-emerald-50/40 p-4 rounded-2xl border border-emerald-200' },
+                e('div', null,
+                  e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '1. 상품명 (Brand & Target)'),
+                  e('textarea', { rows: 2, placeholder: '소비자가 직관적으로 알 수 있는 브랜드명 + 품목 형태', value: reportForm.topicTitle, onChange: (ev) => setReportForm({ ...reportForm, topicTitle: ev.target.value }), className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '2. 해당 음악의 특징 (Heritage)'),
+                  e('textarea', { rows: 2, placeholder: '문화유산의 역사적 배경 및 구체적 음악 특징(장단, 음계, 배음 등)', value: reportForm.productTrait, onChange: (ev) => setReportForm({ ...reportForm, productTrait: ev.target.value }), className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '3. 구체적으로 (개발 방식 & 구성)'),
+                  e('textarea', { rows: 3, placeholder: '어떤 기술(앱, 게임, 굿즈 등)로 구현하며 현대적 타깃에게 어떻게 다가가는가', value: reportForm.productHow, onChange: (ev) => setReportForm({ ...reportForm, productHow: ev.target.value }), className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '4. 얻을 수 있는 효과 (문화·경제)'),
+                  e('textarea', { rows: 3, placeholder: '전통 음악 향유 확대 및 산업적·교육적 파급 효과', value: reportForm.productImpact, onChange: (ev) => setReportForm({ ...reportForm, productImpact: ev.target.value }), className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white' })
+                )
+              ),
+
+              // [주제 3 전용 폼: Slide 08 대중음악사 규격]
+              reportForm.topicCategory === 'pop_history' && e('div', { className: 'space-y-3 bg-teal-50/40 p-4 rounded-2xl border border-teal-200' },
+                e('div', null,
+                  e('label', { className: 'font-bold text-teal-900 block mb-1' }, '1. 연대별 기록 (시대별 핵심 흐름과 사건)'),
+                  e('textarea', { rows: 2, placeholder: '70년대 포크, 90년대 댄스아이돌, 2020년대 숏폼 등 주요 흐름', value: reportForm.popRecords, onChange: (ev) => setReportForm({ ...reportForm, popRecords: ev.target.value }), className: 'w-full p-2 border border-teal-200 rounded-lg bg-white' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-teal-900 block mb-1' }, '2. 연대별 특징 (1, 2, 3 형식의 3문장 작성)'),
+                  [0, 1, 2].map(idx => e('input', {
+                    key: idx,
+                    type: 'text',
+                    placeholder: `특징 문장 ${idx + 1} (${idx === 0 ? '장르' : idx === 1 ? '소비 매체' : '가사·정서'})`,
+                    value: reportForm.popTraits[idx] || '',
+                    onChange: (ev) => {
+                      const up = [...reportForm.popTraits];
+                      up[idx] = ev.target.value;
+                      setReportForm({ ...reportForm, popTraits: up });
+                    },
+                    className: 'w-full p-1.5 border border-teal-200 rounded-lg bg-white mb-1.5 text-xs'
+                  }))
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-teal-900 block mb-1' }, '3. 대표곡 3가지 및 선정이유'),
+                  [0, 1, 2].map(idx => e('div', { key: idx, className: 'flex gap-2 mb-1.5' },
+                    e('input', {
+                      type: 'text',
+                      placeholder: `곡 ${idx + 1} 제목`,
+                      value: reportForm.popTopSongs[idx]?.title || '',
+                      onChange: (ev) => {
+                        const up = [...reportForm.popTopSongs];
+                        up[idx] = { ...up[idx], title: ev.target.value };
+                        setReportForm({ ...reportForm, popTopSongs: up });
+                      },
+                      className: 'w-1/3 p-1.5 border border-teal-200 rounded-lg bg-white text-xs'
+                    }),
+                    e('input', {
+                      type: 'text',
+                      placeholder: '선정 이유 (시대적 의의)',
+                      value: reportForm.popTopSongs[idx]?.reason || '',
+                      onChange: (ev) => {
+                        const up = [...reportForm.popTopSongs];
+                        up[idx] = { ...up[idx], reason: ev.target.value };
+                        setReportForm({ ...reportForm, popTopSongs: up });
+                      },
+                      className: 'w-2/3 p-1.5 border border-teal-200 rounded-lg bg-white text-xs'
+                    })
+                  ))
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-teal-900 block mb-1' }, '4. 2030년 이후 미래 음악 예측 (1, 2, 3 형식의 3문장 작성)'),
+                  [0, 1, 2].map(idx => e('input', {
+                    key: idx,
+                    type: 'text',
+                    placeholder: `미래 예측 문장 ${idx + 1} (${idx === 0 ? '창작 주체' : idx === 1 ? '음악 형식' : '소비 가치'})`,
+                    value: reportForm.popFuture[idx] || '',
+                    onChange: (ev) => {
+                      const up = [...reportForm.popFuture];
+                      up[idx] = ev.target.value;
+                      setReportForm({ ...reportForm, popFuture: up });
+                    },
+                    className: 'w-full p-1.5 border border-teal-200 rounded-lg bg-white mb-1.5 text-xs'
+                  }))
+                )
+              ),
+
+              // [주제 4 전용 폼: 동서양 이론 1:1 맞비교]
+              reportForm.topicCategory === 'east_west' && e('div', { className: 'space-y-3 bg-amber-50/40 p-4 rounded-2xl border border-amber-200' },
+                e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+                  e('div', null,
+                    e('label', { className: 'font-bold text-amber-900 block mb-1' }, '1. 서양 음악 이론 분석'),
+                    e('textarea', { rows: 2, placeholder: '피타고라스 음계, 오선보 기보 원리, 서양 지휘 도형 등', value: reportForm.ewWestern, onChange: (ev) => setReportForm({ ...reportForm, ewWestern: ev.target.value }), className: 'w-full p-2 border border-amber-200 rounded-lg bg-white' })
+                  ),
+                  e('div', null,
+                    e('label', { className: 'font-bold text-amber-900 block mb-1' }, '2. 국악 전통 이론 분석'),
+                    e('textarea', { rows: 2, placeholder: '삼분손익법(황종), 정간보 유량 기보, 호흡 장단 등', value: reportForm.ewGugak, onChange: (ev) => setReportForm({ ...reportForm, ewGugak: ev.target.value }), className: 'w-full p-2 border border-amber-200 rounded-lg bg-white' })
+                  )
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-amber-900 block mb-1' }, '3. 동서양의 1:1 맞비교 대조 분석'),
+                  e('textarea', { rows: 3, placeholder: '동일한 음악적 문제에 대해 동양과 서양이 채택한 수학적·철학적 해결책의 차이점', value: reportForm.ewComparison, onChange: (ev) => setReportForm({ ...reportForm, ewComparison: ev.target.value }), className: 'w-full p-2 border border-amber-200 rounded-lg bg-white' })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-amber-900 block mb-1' }, '4. 실증 실험 및 현대적 시사점'),
+                  e('textarea', { rows: 2, placeholder: '주파수 계산, 초견 연주 실험, 모션 센서 가속도 측정 결과 등', value: reportForm.ewActivity, onChange: (ev) => setReportForm({ ...reportForm, ewActivity: ev.target.value }), className: 'w-full p-2 border border-amber-200 rounded-lg bg-white' })
+                )
+              ),
+
+              // [공통 필수: AI 프롬프트 질의 및 비판적 검증 기록]
+              e('div', { className: 'p-3 bg-purple-50 rounded-xl space-y-2 border border-purple-200' },
+                e('div', { className: 'flex items-center gap-1.5 text-purple-900 font-bold text-xs' },
+                  e('i', { className: 'fa-solid fa-robot text-purple-600' }),
+                  e('span', null, 'AI 활용 기록 (루브릭 채점 필수 반영 요소)')
+                ),
+                e('input', { type: 'text', placeholder: 'AI에게 입력한 질문(프롬프트)', value: reportForm.aiLog.prompt, onChange: (ev) => setReportForm({ ...reportForm, aiLog: { ...reportForm.aiLog, prompt: ev.target.value } }), className: 'w-full p-2 border rounded-lg bg-white text-xs' }),
+                e('textarea', { rows: 2, placeholder: '학생의 비판적 검증 및 교정 내용 (AI 답변의 오류나 한계점을 스스로 보완한 점)', value: reportForm.aiLog.criticalReview, onChange: (ev) => setReportForm({ ...reportForm, aiLog: { ...reportForm.aiLog, criticalReview: ev.target.value } }), className: 'w-full p-2 border rounded-lg bg-white text-xs' })
+              )
+            ),
+
+            e('div', { className: 'flex justify-end gap-2 p-4 border-t bg-slate-50' },
+              e('button', { onClick: () => saveReport(false), className: 'px-4 py-2 border rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-100' }, '임시 저장'),
+              e('button', { onClick: () => saveReport(true), className: 'px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow' }, '최종 제출')
             )
           )
         )
