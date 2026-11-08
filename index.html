@@ -392,10 +392,6 @@
       const [selectedSubject, setSelectedSubject] = useState('all');
       const [toastMessage, setToastMessage] = useState('');
 
-      // 기기 간 백업/동기화 팝업 상태
-      const [showSyncModal, setShowSyncModal] = useState(false);
-      const [syncCodeInput, setSyncCodeInput] = useState('');
-
       const updateCurrentUserSession = function(user) {
         setCurrentUser(user);
         if (user) {
@@ -545,54 +541,6 @@
         setEditingItemCategory(cat);
         setEditingItemForm(JSON.parse(JSON.stringify(item)));
         setActiveItemEditModal(true);
-      };
-
-      // 기기 간 데이터 백업 코드 생성 및 복사
-      const exportSyncData = function() {
-        if (!currentUser) return;
-        const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
-        const sData = allSubmissions[userKey];
-        if (!sData) { showToast('백업할 작성 내용이 없습니다.'); return; }
-        const exportObj = {
-          user: currentUser,
-          submission: sData,
-          exportedAt: new Date().toISOString()
-        };
-        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(exportObj))));
-        navigator.clipboard.writeText(encoded).then(function() {
-          showToast('내 탐구 데이터 백업 코드가 클립보드에 복사되었습니다! 다른 기기에서 불러오세요. 📋');
-        }).catch(function() {
-          prompt('아래 백업 코드를 복사하세요:', encoded);
-        });
-      };
-
-      // 다른 기기에서 백업 코드로 불러와 동기화
-      const importSyncData = function() {
-        if (!syncCodeInput.trim()) { showToast('백업 코드를 입력해 주세요.'); return; }
-        try {
-          const decoded = JSON.parse(decodeURIComponent(escape(atob(syncCodeInput.trim()))));
-          if (!decoded.submission || !decoded.user) {
-            showToast('올바른 백업 코드 형식이 아닙니다.');
-            return;
-          }
-          const userKey = decoded.user.id;
-          const up = Object.assign({}, allSubmissions, { [userKey]: decoded.submission });
-          setAllSubmissions(up);
-          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
-
-          // 계정도 함께 동기화
-          const accs = getStudentAccounts();
-          if (decoded.user.role === 'student' && !accs[userKey]) {
-            accs[userKey] = { id: userKey, name: decoded.user.name, pw: '0000' };
-            localStorage.setItem('music_student_accounts', JSON.stringify(accs));
-          }
-
-          setShowSyncModal(false);
-          setSyncCodeInput('');
-          showToast(decoded.user.name + ' 학생의 탐구 데이터가 이 기기로 완벽히 동기화되었습니다! 🔄');
-        } catch(err) {
-          showToast('코드 해석에 실패했습니다. 코드를 다시 확인해 주세요.');
-        }
       };
 
       // [핵심 변경] 추천 카드를 클릭했을 때 기존 내용이 회색 반투명 플레이스홀더로 뜨고, 글씨를 쓰면 새로워지도록 설정
@@ -793,12 +741,6 @@
               currentUser ? e('div', { className: 'flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold' },
                 e('i', { className: 'fa-solid fa-user text-slate-500' }),
                 e('span', null, currentUser.name + ' (' + currentUser.id + ')'),
-                e('button', { onClick: exportSyncData, className: 'text-indigo-600 hover:text-indigo-800 ml-1', title: '다른 기기 동기화용 백업 코드 복사' },
-                  e('i', { className: 'fa-solid fa-cloud-arrow-up' })
-                ),
-                e('button', { onClick: function() { setShowSyncModal(true); }, className: 'text-teal-600 hover:text-teal-800 ml-1', title: '다른 기기 데이터 불러오기' },
-                  e('i', { className: 'fa-solid fa-cloud-arrow-down' })
-                ),
                 e('button', { onClick: handleLogout, className: 'text-slate-400 hover:text-rose-600 ml-1', title: '로그아웃' },
                   e('i', { className: 'fa-solid fa-right-from-bracket' })
                 )
@@ -2065,34 +2007,6 @@
             e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
               e('button', { onClick: function() { setGradingStudentId(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, '취소'),
               e('button', { onClick: saveTeacherGrading, className: 'px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' }, '채점 완료 및 점수 저장')
-            )
-          )
-        ),
-
-        // [기기 간 데이터 백업/불러오기 모달]
-        showSyncModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm' },
-          e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full space-y-4 shadow-2xl' },
-            e('div', { className: 'flex items-center justify-between pb-2 border-b' },
-              e('div', { className: 'flex items-center gap-2' },
-                e('i', { className: 'fa-solid fa-cloud-arrow-down text-teal-600' }),
-                e('h3', { className: 'text-sm font-black text-slate-900' }, '다른 기기에서 데이터 불러오기')
-              ),
-              e('button', { onClick: function() { setShowSyncModal(false); }, className: 'text-slate-400 hover:text-slate-600' },
-                e('i', { className: 'fa-solid fa-xmark text-lg' })
-              )
-            ),
-            e('p', { className: 'text-xs text-slate-600 leading-relaxed' },
-              '학교 PC나 다른 스마트폰에서 복사해 둔 [백업 코드]를 여기에 붙여넣으면, 지금까지 작성한 모든 보고서와 계정 정보가 이 기기로 즉시 동기화됩니다.'
-            ),
-            e('textarea', {
-              rows: 5,
-              placeholder: '복사한 백업 코드를 여기에 붙여넣으세요...',
-              value: syncCodeInput,
-              onChange: function(ev) { setSyncCodeInput(ev.target.value); },
-              className: 'w-full p-3 border rounded-xl font-mono text-2xs bg-slate-50'
-            }),
-            e('button', { onClick: importSyncData, className: 'w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow' },
-              '이 기기로 데이터 동기화 완료하기'
             )
           )
         ),
