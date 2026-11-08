@@ -392,6 +392,10 @@
       const [selectedSubject, setSelectedSubject] = useState('all');
       const [toastMessage, setToastMessage] = useState('');
 
+      // 기기 간 백업/동기화 팝업 상태
+      const [showSyncModal, setShowSyncModal] = useState(false);
+      const [syncCodeInput, setSyncCodeInput] = useState('');
+
       const updateCurrentUserSession = function(user) {
         setCurrentUser(user);
         if (user) {
@@ -541,6 +545,54 @@
         setEditingItemCategory(cat);
         setEditingItemForm(JSON.parse(JSON.stringify(item)));
         setActiveItemEditModal(true);
+      };
+
+      // 기기 간 데이터 백업 코드 생성 및 복사
+      const exportSyncData = function() {
+        if (!currentUser) return;
+        const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
+        const sData = allSubmissions[userKey];
+        if (!sData) { showToast('백업할 작성 내용이 없습니다.'); return; }
+        const exportObj = {
+          user: currentUser,
+          submission: sData,
+          exportedAt: new Date().toISOString()
+        };
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(exportObj))));
+        navigator.clipboard.writeText(encoded).then(function() {
+          showToast('내 탐구 데이터 백업 코드가 클립보드에 복사되었습니다! 다른 기기에서 불러오세요. 📋');
+        }).catch(function() {
+          prompt('아래 백업 코드를 복사하세요:', encoded);
+        });
+      };
+
+      // 다른 기기에서 백업 코드로 불러와 동기화
+      const importSyncData = function() {
+        if (!syncCodeInput.trim()) { showToast('백업 코드를 입력해 주세요.'); return; }
+        try {
+          const decoded = JSON.parse(decodeURIComponent(escape(atob(syncCodeInput.trim()))));
+          if (!decoded.submission || !decoded.user) {
+            showToast('올바른 백업 코드 형식이 아닙니다.');
+            return;
+          }
+          const userKey = decoded.user.id;
+          const up = Object.assign({}, allSubmissions, { [userKey]: decoded.submission });
+          setAllSubmissions(up);
+          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+
+          // 계정도 함께 동기화
+          const accs = getStudentAccounts();
+          if (decoded.user.role === 'student' && !accs[userKey]) {
+            accs[userKey] = { id: userKey, name: decoded.user.name, pw: '0000' };
+            localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+          }
+
+          setShowSyncModal(false);
+          setSyncCodeInput('');
+          showToast(decoded.user.name + ' 학생의 탐구 데이터가 이 기기로 완벽히 동기화되었습니다! 🔄');
+        } catch(err) {
+          showToast('코드 해석에 실패했습니다. 코드를 다시 확인해 주세요.');
+        }
       };
 
       // [핵심 변경] 추천 카드를 클릭했을 때 기존 내용이 회색 반투명 플레이스홀더로 뜨고, 글씨를 쓰면 새로워지도록 설정
@@ -741,6 +793,12 @@
               currentUser ? e('div', { className: 'flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold' },
                 e('i', { className: 'fa-solid fa-user text-slate-500' }),
                 e('span', null, currentUser.name + ' (' + currentUser.id + ')'),
+                e('button', { onClick: exportSyncData, className: 'text-indigo-600 hover:text-indigo-800 ml-1', title: '다른 기기 동기화용 백업 코드 복사' },
+                  e('i', { className: 'fa-solid fa-cloud-arrow-up' })
+                ),
+                e('button', { onClick: function() { setShowSyncModal(true); }, className: 'text-teal-600 hover:text-teal-800 ml-1', title: '다른 기기 데이터 불러오기' },
+                  e('i', { className: 'fa-solid fa-cloud-arrow-down' })
+                ),
                 e('button', { onClick: handleLogout, className: 'text-slate-400 hover:text-rose-600 ml-1', title: '로그아웃' },
                   e('i', { className: 'fa-solid fa-right-from-bracket' })
                 )
@@ -881,6 +939,7 @@
                       e('strong', { className: 'text-slate-700 mr-1' }, '측정·활동 방법:'), item.activity
                     )
                   ),
+                  // 클릭 시 내용이 회색 반투명 상태로 보이고 타이핑 시 새로워지도록 연동
                   e('button', { onClick: function() { openReportModal('inquiry', item); }, className: 'mt-4 w-full py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition' }, '이 주제로 보고서 작성')
                 );
               })
@@ -952,6 +1011,7 @@
                         )
                       )
                     ),
+                    // 요청에 따라 '이 예시 바탕으로 쓰기' 버튼 제거 및 안내 문구만 표기
                     e('div', { className: 'mt-3 pt-2 border-t border-slate-100 text-2xs text-slate-400' },
                       e('span', null, '※ 위 자료를 충분히 참고한 뒤, 상단 [선택지 1] 또는 [선택지 2]를 눌러 기획서를 작성하세요.')
                     )
@@ -1117,6 +1177,7 @@
                         e('strong', { className: 'text-slate-700 mr-1' }, '측정(실증) 방법:'), item.activity
                       )
                     ),
+                    // 클릭 시 내용이 회색 반투명 플레이스홀더 상태로 열리고 타이핑 시 새로워지도록 연동
                     e('button', {
                       onClick: function() { openReportModal('east_west', item); },
                       className: 'mt-4 w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition'
@@ -1285,6 +1346,753 @@
                   className: 'w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition shadow'
                 }, '계정 정보 저장하기')
               )
+            )
+          )
+        ),
+
+        // 보고서 작성 모달 (주제 3 1920-2020 신규 서식 + 반투명 플레이스홀더 적용)
+        activeReportModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
+          e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
+            e('div', { className: 'p-5 border-b border-slate-200 flex items-start justify-between bg-slate-50' },
+              e('div', null,
+                e('div', { className: 'flex items-center gap-2' },
+                  e('span', { className: 'text-2xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800' },
+                    reportForm.slot === 'report1' ? '과제 1번 슬롯' : '과제 2번 슬롯'
+                  ),
+                  currentUser && currentUser.role === 'teacher' && e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200' }, '교사 점검 모드')
+                ),
+                e('h3', { className: 'text-base sm:text-lg font-black text-slate-900 mt-1' }, '개인 탐구 보고서 작성 및 수정')
+              ),
+              e('button', { onClick: function() { setActiveReportModal(false); }, className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
+              )
+            ),
+
+            e('div', { className: 'p-6 overflow-y-auto space-y-4 flex-1 text-xs' },
+              // 주제 1 마무리 지침
+              reportForm.topicCategory === 'inquiry' && e('div', { className: 'p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-200 text-indigo-950 space-y-1' },
+                e('div', { className: 'flex items-center gap-1.5 font-bold text-indigo-900' },
+                  e('i', { className: 'fa-solid fa-pen-nib text-indigo-600' }),
+                  e('span', null, '마무리: 탐구 보고서를 쓸 때 지침')
+                ),
+                e('p', { className: 'text-2xs leading-relaxed text-indigo-900/90' }, '· 작성 순서: 주제 → 핵심 개념 → 가설 → 변인(독립·종속·통제) → 측정 방법 → 결과(표·그래프) → 결론 → 한계와 후속 탐구의 순서로 작성합니다.'),
+                e('p', { className: 'text-2xs leading-relaxed text-indigo-900/90' }, '· 한계를 분명히 적습니다(표본 수, 앱의 오차, 변인 통제의 어려움, 상관과 인과의 차이 등).'),
+                e('p', { className: 'text-2xs leading-relaxed text-rose-700 font-semibold' }, '· 가설이 맞지 않았다면 이유를 분석합니다. 결과를 가설에 맞춰 억지로 고치지 않습니다.')
+              ),
+
+              // [주제 3 전용 상단 지침: 빨간색 경고 문구 포함]
+              reportForm.topicCategory === 'pop_history' && e('div', { className: 'p-4 rounded-2xl bg-teal-50/80 border border-teal-200 space-y-1 text-teal-950' },
+                e('div', { className: 'flex items-center gap-1.5 font-black text-teal-900' },
+                  e('i', { className: 'fa-solid fa-circle-exclamation text-teal-600' }),
+                  e('span', null, '주제 3 보고서 작성 공식 지침')
+                ),
+                e('p', { className: 'text-2xs leading-relaxed text-teal-900/90' },
+                  '· 작성 순서: 우리나라 대중음악사 정리(역사, 음악) → 글로벌 대중음악사 정리(역사, 음악) → 2030년 이후 미래 음악 예측 순서로 작성합니다.'
+                ),
+                e('p', { className: 'text-xs font-bold text-rose-600 leading-relaxed' },
+                  '· 예시에 작성된 내용을 그대로 쓰지 않습니다.'
+                )
+              ),
+
+              // 주제 4 마무리 지침
+              reportForm.topicCategory === 'east_west' && e('div', { className: 'p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200 text-amber-950 space-y-1' },
+                e('div', { className: 'flex items-center gap-1.5 font-bold text-amber-900' },
+                  e('i', { className: 'fa-solid fa-scale-balanced text-amber-600' }),
+                  e('span', null, '마무리: 국악·서양 교차 실증 보고서를 쓸 때 지침')
+                ),
+                e('p', { className: 'text-2xs leading-relaxed text-amber-900/90' }, '· 작성 순서: 주제 → 서양 이론 요약 → 국악 이론 요약 → 가설 → 변인 → 측정 방법 → 결과(표·그래프) → 두 체계의 같은 점과 다른 점 → 한계와 후속 탐구의 순서로 씁니다.'),
+                e('p', { className: 'text-2xs leading-relaxed text-amber-900/90 font-semibold' }, '· ‘서양이 낫다’ 또는 ‘국악이 낫다’는 결론은 내리지 않고, 각 체계가 무엇을 기준으로 소리를 다루는지를 자료로 설명합니다.'),
+                e('p', { className: 'text-2xs leading-relaxed text-rose-700' }, '· 한계를 분명히 적습니다(표본 수, 앱 오차, 악기·연주자 차이, 상관과 인과의 차이 등).')
+              ),
+
+              e('div', null,
+                e('label', { className: 'font-bold text-slate-800 block mb-1' }, '탐구/기획 주제명'),
+                e('input', {
+                  type: 'text',
+                  placeholder: reportPlaceholders.topicTitle,
+                  value: reportForm.topicTitle,
+                  onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { topicTitle: ev.target.value })); },
+                  className: 'w-full p-2.5 border rounded-xl font-bold bg-white'
+                })
+              ),
+
+              // [주제 1 전용 폼: 회색 반투명 플레이스홀더 적용]
+              reportForm.topicCategory === 'inquiry' && e('div', { className: 'space-y-3 bg-slate-50 p-4 rounded-2xl border' },
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '1. 연계 교과 및 핵심 이론 개념'),
+                  e('input', {
+                    type: 'text',
+                    placeholder: reportPlaceholders.coreConcept,
+                    value: reportForm.coreConcept,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { coreConcept: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '2. 일상의 호기심 및 가설 설정'),
+                  e('textarea', {
+                    rows: 2,
+                    placeholder: reportPlaceholders.hypothesis,
+                    value: reportForm.hypothesis,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { hypothesis: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
+                ),
+                e('div', { className: 'p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-2' },
+                  e('label', { className: 'font-bold text-indigo-900 block' }, '3. 변인 통제 설정 (과학적 실험 절차)'),
+                  e('input', {
+                    type: 'text',
+                    placeholder: reportPlaceholders.variables,
+                    value: reportForm.variables,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { variables: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white text-2xs variable-box'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '4. 측정 방법 및 실험 절차'),
+                  e('textarea', {
+                    rows: 3,
+                    placeholder: reportPlaceholders.procedure,
+                    value: reportForm.procedure,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { procedure: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '5. 결론 및 음악적 시사점'),
+                  e('textarea', {
+                    rows: 2,
+                    placeholder: reportPlaceholders.conclusion,
+                    value: reportForm.conclusion,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { conclusion: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-slate-700 block mb-1' }, '6. 한계와 후속 탐구 (필수 기재)'),
+                  e('textarea', {
+                    rows: 2,
+                    placeholder: reportPlaceholders.limitations,
+                    value: reportForm.limitations,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { limitations: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
+                )
+              ),
+
+              // [주제 2 전용 폼: 문화유산 상품 기획 + 회색 반투명 플레이스홀더]
+              reportForm.topicCategory === 'product' && e('div', { className: 'space-y-3 bg-emerald-50/40 p-4 rounded-2xl border border-emerald-200' },
+                e('div', { className: 'p-3 bg-white rounded-xl border border-emerald-200' },
+                  e('label', { className: 'font-bold text-emerald-950 block mb-1' }, '문화유산명 및 기획 상품명'),
+                  e('input', {
+                    type: 'text',
+                    placeholder: reportPlaceholders.brandName,
+                    value: reportForm.brandName,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { brandName: ev.target.value })); },
+                    className: 'w-full p-2 border border-emerald-300 rounded-lg bg-emerald-50/20 font-bold'
+                  })
+                ),
+                e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+                  e('div', null,
+                    e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '1. 해당 음악의 특징'),
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productTrait,
+                      value: reportForm.productTrait,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productTrait: ev.target.value })); },
+                      className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white'
+                    })
+                  ),
+                  e('div', null,
+                    e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '2. 구체적으로 (개발 방식 및 구성)'),
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productHow,
+                      value: reportForm.productHow,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productHow: ev.target.value })); },
+                      className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white'
+                    })
+                  )
+                ),
+                e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+                  e('div', null,
+                    e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '3. 얻을 수 있는 기대 효과'),
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productImpact,
+                      value: reportForm.productImpact,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productImpact: ev.target.value })); },
+                      className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white'
+                    })
+                  ),
+                  e('div', null,
+                    e('label', { className: 'font-bold text-amber-900 block mb-1' }, '4. 상품 개발 및 사용(판매·체험) 시 유의할 점'),
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productPrecaution,
+                      value: reportForm.productPrecaution,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productPrecaution: ev.target.value })); },
+                      className: 'w-full p-2 border border-amber-300 rounded-lg bg-amber-50/30'
+                    })
+                  )
+                )
+              ),
+
+              // [주제 3 신규 정비 폼: 1920s ~ 2020s 11개 구간 완벽 분리]
+              reportForm.topicCategory === 'pop_history' && e('div', { className: 'space-y-6 bg-teal-50/40 p-4 rounded-2xl border border-teal-200' },
+                // 1. 우리나라 대중음악 100년사 정리 (1920s ~ 2020s)
+                e('div', { className: 'space-y-3' },
+                  e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
+                    e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '1'),
+                    e('h4', { className: 'text-sm font-extrabold text-teal-950' }, '우리나라 대중음악 100년사 정리 (1920년대 ~ 2020년대)'),
+                    e('span', { className: 'text-2xs text-teal-700 font-semibold ml-auto' }, '10년 단위 11개 구간')
+                  ),
+                  e('div', { className: 'space-y-2' },
+                    POP_ERAS.map(function(era, idx) {
+                      const item = (reportForm.popKorean100 && reportForm.popKorean100[idx]) || { song: '', history: '' };
+                      return e('div', { key: 'kr_' + era, className: 'p-2.5 bg-white rounded-xl border border-teal-100 flex flex-col sm:flex-row gap-2 items-start sm:items-center' },
+                        e('span', { className: 'text-xs font-black text-teal-800 bg-teal-50 px-2 py-1 rounded w-20 shrink-0 text-center' }, era),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 대표곡(가수) 입력 (예시 그대로 복사 금지)',
+                          value: item.song || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popKorean100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { song: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popKorean100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        }),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 대표적 역사적 사건이나 당시 시대상 기록',
+                          value: item.history || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popKorean100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { history: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popKorean100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        })
+                      );
+                    })
+                  )
+                ),
+
+                // 2. 글로벌 대중음악 100년사 정리 (1920s ~ 2020s)
+                e('div', { className: 'space-y-3' },
+                  e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
+                    e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '2'),
+                    e('h4', { className: 'text-sm font-extrabold text-teal-950' }, '글로벌 대중음악 100년사 정리 (1920년대 ~ 2020년대)'),
+                    e('span', { className: 'text-2xs text-teal-700 font-semibold ml-auto' }, '10년 단위 11개 구간')
+                  ),
+                  e('div', { className: 'space-y-2' },
+                    POP_ERAS.map(function(era, idx) {
+                      const item = (reportForm.popGlobal100 && reportForm.popGlobal100[idx]) || { song: '', history: '' };
+                      return e('div', { key: 'gl_' + era, className: 'p-2.5 bg-white rounded-xl border border-teal-100 flex flex-col sm:flex-row gap-2 items-start sm:items-center' },
+                        e('span', { className: 'text-xs font-black text-teal-800 bg-teal-50 px-2 py-1 rounded w-20 shrink-0 text-center' }, era),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 글로벌 대표곡(가수) 입력 (예시 그대로 복사 금지)',
+                          value: item.song || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popGlobal100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { song: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popGlobal100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        }),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 글로벌 대표 역사적 사건이나 당시 시대상 기록',
+                          value: item.history || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popGlobal100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { history: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popGlobal100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        })
+                      );
+                    })
+                  )
+                ),
+
+                // 3. 2030년 이후 미래 음악 예측 (3대 측면)
+                e('div', { className: 'space-y-3' },
+                  e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
+                    e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '3'),
+                    e('h4', { className: 'text-sm font-extrabold text-teal-950' }, '2030년 이후 미래 음악 예측 (3대 측면)'),
+                    e('span', { className: 'text-2xs text-teal-700 font-semibold ml-auto' }, '창작·형식·가치')
+                  ),
+                  e('div', { className: 'space-y-3' },
+                    e('div', { className: 'p-3 bg-white rounded-xl border border-teal-100' },
+                      e('label', { className: 'font-bold text-teal-950 block mb-1' }, '1. 창작 주체 측면 예측'),
+                      e('textarea', {
+                        rows: 2,
+                        placeholder: '인공지능(AI), 버추얼 아티스트, 인간 음악가 간의 역할 변화 및 새로운 창작 주체에 대한 예측을 서술하세요.',
+                        value: (reportForm.popFutureThree && reportForm.popFutureThree.creator) || '',
+                        onChange: function(ev) {
+                          setReportForm(Object.assign({}, reportForm, {
+                            popFutureThree: Object.assign({}, reportForm.popFutureThree, { creator: ev.target.value })
+                          }));
+                        },
+                        className: 'w-full p-2 border border-slate-200 rounded-lg text-xs'
+                      })
+                    ),
+                    e('div', { className: 'p-3 bg-white rounded-xl border border-teal-100' },
+                      e('label', { className: 'font-bold text-teal-950 block mb-1' }, '2. 음악 형식 측면 예측'),
+                      e('textarea', {
+                        rows: 2,
+                        placeholder: '곡의 길이(초단축 음원 등), 절-후렴 구조의 해체, 공간 음향, 인터랙티브 가변형 음악 등 형식적 변화를 예측하세요.',
+                        value: (reportForm.popFutureThree && reportForm.popFutureThree.form) || '',
+                        onChange: function(ev) {
+                          setReportForm(Object.assign({}, reportForm, {
+                            popFutureThree: Object.assign({}, reportForm.popFutureThree, { form: ev.target.value })
+                          }));
+                        },
+                        className: 'w-full p-2 border border-slate-200 rounded-lg text-xs'
+                      })
+                    ),
+                    e('div', { className: 'p-3 bg-white rounded-xl border border-teal-100' },
+                      e('label', { className: 'font-bold text-teal-950 block mb-1' }, '3. 음악의 가치 측면 예측'),
+                      e('textarea', {
+                        rows: 2,
+                        placeholder: '생성형 사운드 범람 속에서 대중이 추구할 진정한 음악적 가치(현장성, 어쿠스틱 라이브, 인간적 유대감 등)를 예측하세요.',
+                        value: (reportForm.popFutureThree && reportForm.popFutureThree.value) || '',
+                        onChange: function(ev) {
+                          setReportForm(Object.assign({}, reportForm, {
+                            popFutureThree: Object.assign({}, reportForm.popFutureThree, { value: ev.target.value })
+                          }));
+                        },
+                        className: 'w-full p-2 border border-slate-200 rounded-lg text-xs'
+                      })
+                    )
+                  )
+                )
+              ),
+
+              // [주제 4 전용 폼: 회색 반투명 플레이스홀더 적용]
+              reportForm.topicCategory === 'east_west' && e('div', { className: 'space-y-3 bg-amber-50/40 p-4 rounded-2xl border border-amber-200' },
+                e('div', null,
+                  e('label', { className: 'font-bold text-amber-950 block mb-1' }, '1. 이론 학습 (서양 이론 vs 국악 이론 요약 및 핵심 개념)'),
+                  e('textarea', {
+                    rows: 3,
+                    placeholder: reportPlaceholders.ewStep1Theory,
+                    value: reportForm.ewStep1Theory,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep1Theory: ev.target.value })); },
+                    className: 'w-full p-2 border border-amber-200 rounded-lg bg-white leading-relaxed'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-amber-950 block mb-1' }, '2. 탐구 영역 선택 및 가설 세우기'),
+                  e('textarea', {
+                    rows: 2,
+                    placeholder: reportPlaceholders.ewStep2Hypothesis,
+                    value: reportForm.ewStep2Hypothesis,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep2Hypothesis: ev.target.value })); },
+                    className: 'w-full p-2 border border-amber-200 rounded-lg bg-white'
+                  })
+                ),
+                e('div', { className: 'p-3 bg-amber-100/50 rounded-xl border border-amber-200 space-y-1' },
+                  e('label', { className: 'font-bold text-amber-900 block' }, '3. 변인 통제 설정 (독립 / 종속 / 통제변인)'),
+                  e('input', {
+                    type: 'text',
+                    placeholder: reportPlaceholders.ewStep3Variables,
+                    value: reportForm.ewStep3Variables,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep3Variables: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white text-2xs variable-box'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-amber-950 block mb-1' }, '4. 실증 활동 (측정·계산·설문 방법 및 결과 데이터)'),
+                  e('textarea', {
+                    rows: 3,
+                    placeholder: reportPlaceholders.ewStep4Empirical,
+                    value: reportForm.ewStep4Empirical,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep4Empirical: ev.target.value })); },
+                    className: 'w-full p-2 border border-amber-200 rounded-lg bg-white leading-relaxed'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'font-bold text-amber-950 block mb-1' }, '5. 두 체계의 같은 점과 다른 점 비교 및 한계점 서술'),
+                  e('textarea', {
+                    rows: 3,
+                    placeholder: reportPlaceholders.ewStep5Comparison,
+                    value: reportForm.ewStep5Comparison,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep5Comparison: ev.target.value })); },
+                    className: 'w-full p-2 border border-amber-200 rounded-lg bg-white leading-relaxed'
+                  })
+                )
+              ),
+
+              // [공통 필수: AI 프롬프트 질의 및 비판적 검증 기록 + 캡처 사진 첨부 기능]
+              e('div', { className: 'p-4 bg-purple-50 rounded-2xl space-y-3 border border-purple-200' },
+                e('div', { className: 'flex items-center justify-between' },
+                  e('div', { className: 'flex items-center gap-1.5 text-purple-950 font-extrabold text-xs' },
+                    e('i', { className: 'fa-solid fa-robot text-purple-600' }),
+                    e('span', null, 'AI 활용 기록 및 비판적 검증 (단순 복사 방지 & 루브릭 채점 필수 반영)')
+                  ),
+                  e('span', { className: 'text-2xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full' }, '대화 캡처 사진 첨부 필수')
+                ),
+                e('div', null,
+                  e('label', { className: 'block text-2xs font-bold text-purple-900 mb-1' }, 'AI에게 입력한 질문(프롬프트)'),
+                  e('input', {
+                    type: 'text',
+                    placeholder: 'AI에게 입력한 질문을 구체적으로 적으세요',
+                    value: reportForm.aiLog.prompt,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { aiLog: Object.assign({}, reportForm.aiLog, { prompt: ev.target.value }) })); },
+                    className: 'w-full p-2 border border-purple-200 rounded-lg bg-white text-xs'
+                  })
+                ),
+
+                // 사진 캡처 업로드 기능
+                e('div', { className: 'p-3 bg-white rounded-xl border border-purple-200 space-y-2' },
+                  e('div', { className: 'flex items-center justify-between' },
+                    e('label', { className: 'font-bold text-purple-950 text-xs flex items-center gap-1.5' },
+                      e('i', { className: 'fa-solid fa-image text-purple-600' }),
+                      e('span', null, 'AI와의 실제 대화 캡처 사진 첨부 (스크린샷)')
+                    ),
+                    reportForm.aiLog.screenshotImg && e('button', {
+                      type: 'button',
+                      onClick: function() {
+                        setReportForm(Object.assign({}, reportForm, {
+                          aiLog: Object.assign({}, reportForm.aiLog, { screenshotImg: '' })
+                        }));
+                      },
+                      className: 'text-2xs text-rose-600 hover:underline font-bold'
+                    }, '사진 삭제')
+                  ),
+                  e('input', {
+                    type: 'file',
+                    accept: 'image/*',
+                    onChange: handleImageUpload,
+                    className: 'block w-full text-2xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-2xs file:font-bold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200'
+                  }),
+                  reportForm.aiLog.screenshotImg && e('div', { className: 'mt-2 border rounded-lg overflow-hidden max-h-48 bg-slate-50 flex items-center justify-center p-1' },
+                    e('img', { src: reportForm.aiLog.screenshotImg, alt: 'AI 대화 캡처 미리보기', className: 'max-h-44 object-contain rounded' })
+                  )
+                ),
+
+                e('div', null,
+                  e('label', { className: 'block text-2xs font-bold text-purple-900 mb-1' }, '학생의 비판적 검증 및 교정 내용 (AI 답변의 오류나 한계점을 스스로 보완한 점)'),
+                  e('textarea', {
+                    rows: 3,
+                    placeholder: 'AI의 답변을 무비판적으로 복사하지 않고, 국가유산청/교과서 등을 통해 확인한 오류나 보완한 내용을 본인의 문장으로 작성하세요.',
+                    value: reportForm.aiLog.criticalReview,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { aiLog: Object.assign({}, reportForm.aiLog, { criticalReview: ev.target.value }) })); },
+                    className: 'w-full p-2 border border-purple-200 rounded-lg bg-white text-xs leading-relaxed'
+                  })
+                )
+              )
+            ),
+
+            e('div', { className: 'flex justify-end gap-2 p-4 border-t bg-slate-50' },
+              e('button', { onClick: function() { saveReport(false); }, className: 'px-4 py-2 border rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-100' }, '임시 저장'),
+              e('button', { onClick: function() { saveReport(true); }, className: 'px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow' }, '최종 제출')
+            )
+          )
+        ),
+
+        // [교사용 개별 카드 편집 팝업 모달]
+        activeItemEditModal && editingItemForm && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
+          e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-fade-in' },
+            e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
+              e('div', { className: 'flex items-center gap-2' },
+                e('div', { className: 'w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center text-xs font-bold' },
+                  e('i', { className: 'fa-solid fa-pen-ruler' })
+                ),
+                e('div', null,
+                  e('h3', { className: 'text-sm font-black text-purple-950' }, '교사 관리자: 카드 세부 내용 편집'),
+                  e('p', { className: 'text-2xs text-purple-700' }, '수정한 내용은 학생들의 탐구 카드에 즉각 적용됩니다.')
+                )
+              ),
+              e('button', { onClick: function() { setActiveItemEditModal(false); }, className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
+              )
+            ),
+
+            e('form', { onSubmit: handleSaveItemEdit, className: 'p-6 space-y-3.5 text-xs' },
+              editingItemCategory === 'inquiry' && e('div', { className: 'space-y-3' },
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '탐구 질문 (제목)'),
+                  e('input', { type: 'text', value: editingItemForm.question || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { question: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs font-bold' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '핵심 개념'),
+                  e('input', { type: 'text', value: editingItemForm.concept || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { concept: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '가설 설정'),
+                  e('textarea', { rows: 2, value: editingItemForm.hypothesis || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { hypothesis: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '변인 통제 (독립/종속/통제)'),
+                  e('input', {
+                    type: 'text',
+                    value: typeof editingItemForm.variables === 'string'
+                      ? editingItemForm.variables
+                      : ('독립변인: ' + ((editingItemForm.variables && editingItemForm.variables.independent) || '') + ' / 종속변인: ' + ((editingItemForm.variables && editingItemForm.variables.dependent) || '') + ' / 통제변인: ' + ((editingItemForm.variables && editingItemForm.variables.controlled) || '')),
+                    onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { variables: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-xl text-xs variable-box'
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '실험·측정 활동 내용'),
+                  e('textarea', { rows: 2, value: editingItemForm.activity || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { activity: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                )
+              ),
+
+              editingItemCategory === 'product' && e('div', { className: 'space-y-3' },
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '문화유산명 (예: 사물놀이, 강강술래)'),
+                  e('input', { type: 'text', value: editingItemForm.name || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { name: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs font-bold' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '해당 음악의 특징'),
+                  e('textarea', { rows: 2, value: editingItemForm.musicTrait || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { musicTrait: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '개발 방식 및 구성'),
+                  e('textarea', { rows: 2, value: editingItemForm.howToDevelop || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { howToDevelop: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '기대 효과'),
+                  e('textarea', { rows: 2, value: editingItemForm.impact || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { impact: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-amber-800 mb-1' }, '유의할 점 (저작권, 안전 등)'),
+                  e('textarea', { rows: 2, value: editingItemForm.precaution || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { precaution: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs bg-amber-50/40' })
+                )
+              ),
+
+              editingItemCategory === 'east_west' && e('div', { className: 'space-y-3' },
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '메인 탐구 과제 (제목)'),
+                  e('input', { type: 'text', value: editingItemForm.title || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { title: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs font-bold' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '탐구 영역 (조율, 음정과 음계, 기보, 악기 분류 등)'),
+                  e('input', { type: 'text', value: editingItemForm.area || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { area: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '핵심 개념'),
+                  e('input', { type: 'text', value: editingItemForm.concept || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { concept: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '두 체계의 차이(쉬운 말)'),
+                  e('textarea', { rows: 2, value: editingItemForm.twoSystemsDiff || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { twoSystemsDiff: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '가설 설정'),
+                  e('textarea', { rows: 2, value: editingItemForm.hypothesis || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { hypothesis: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '변인 통제 (독립/종속/통제)'),
+                  e('input', { type: 'text', value: editingItemForm.variables || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { variables: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs variable-box' })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '측정(실증) 방법'),
+                  e('textarea', { rows: 2, value: editingItemForm.activity || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { activity: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
+                )
+              ),
+
+              e('div', { className: 'flex justify-end gap-2 pt-3 border-t' },
+                e('button', { type: 'button', onClick: function() { setActiveItemEditModal(false); }, className: 'px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50' }, '취소'),
+                e('button', { type: 'submit', className: 'px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow' }, '변경 내용 저장')
+              )
+            )
+          )
+        ),
+
+        // [교사용 개별 학생 정밀 채점 모달 (과제당 30점, 총 60점 만점)]
+        gradingStudentId && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
+          e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
+            e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
+              e('div', null,
+                e('h3', { className: 'text-base font-black text-purple-950' },
+                  (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].studentName) + ' (' + gradingStudentId + ') 학생 수행평가 채점'
+                ),
+                e('p', { className: 'text-xs text-purple-700 mt-0.5' },
+                  '개인 탐구 2개 채점 (과제 1: 30점 만점 + 과제 2: 30점 만점 = 총 60점 만점, 5점 급간 루브릭)'
+                )
+              ),
+              e('button', { onClick: function() { setGradingStudentId(null); }, className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
+              )
+            ),
+
+            e('div', { className: 'p-6 overflow-y-auto space-y-6 flex-1 text-xs' },
+              e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+                e('div', { className: 'p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2' },
+                  e('div', { className: 'flex items-center justify-between' },
+                    e('span', { className: 'font-bold text-slate-800' }, '과제 1 제출 내용'),
+                    e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800' },
+                      (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.isSubmitted) ? '제출 완료' : '미제출'
+                    )
+                  ),
+                  e('p', { className: 'font-bold text-slate-900 text-sm' },
+                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.topicTitle) || '미선택'
+                  ),
+                  e('p', { className: 'text-slate-600 line-clamp-4 leading-relaxed' },
+                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && (allSubmissions[gradingStudentId].reports.report1.procedure || allSubmissions[gradingStudentId].reports.report1.productHow || allSubmissions[gradingStudentId].reports.report1.ewStep4Empirical || ((allSubmissions[gradingStudentId].reports.report1.popKorean100 && allSubmissions[gradingStudentId].reports.report1.popKorean100[0] && allSubmissions[gradingStudentId].reports.report1.popKorean100[0].song) || ''))) || '작성된 내용이 없습니다.'
+                  ),
+                  e('div', { className: 'text-2xs text-purple-800 bg-purple-50 p-2.5 rounded-lg space-y-1' },
+                    e('p', null, e('strong', null, 'AI 질문: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.aiLog && allSubmissions[gradingStudentId].reports.report1.aiLog.prompt) || '없음'),
+                    e('p', null, e('strong', null, '비판 검증: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.aiLog && allSubmissions[gradingStudentId].reports.report1.aiLog.criticalReview) || '없음'),
+                    allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.aiLog && allSubmissions[gradingStudentId].reports.report1.aiLog.screenshotImg && e('div', { className: 'pt-1' },
+                      e('span', { className: 'font-bold text-purple-900 block mb-0.5' }, '캡처 사진:'),
+                      e('img', { src: allSubmissions[gradingStudentId].reports.report1.aiLog.screenshotImg, alt: 'AI 캡처', className: 'max-h-24 rounded border border-purple-200' })
+                    )
+                  )
+                ),
+
+                e('div', { className: 'p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2' },
+                  e('div', { className: 'flex items-center justify-between' },
+                    e('span', { className: 'font-bold text-slate-800' }, '과제 2 제출 내용'),
+                    e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800' },
+                      (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.isSubmitted) ? '제출 완료' : '미제출'
+                    )
+                  ),
+                  e('p', { className: 'font-bold text-slate-900 text-sm' },
+                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.topicTitle) || '미선택'
+                  ),
+                  e('p', { className: 'text-slate-600 line-clamp-4 leading-relaxed' },
+                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && (allSubmissions[gradingStudentId].reports.report2.procedure || allSubmissions[gradingStudentId].reports.report2.productHow || allSubmissions[gradingStudentId].reports.report2.ewStep4Empirical || ((allSubmissions[gradingStudentId].reports.report2.popKorean100 && allSubmissions[gradingStudentId].reports.report2.popKorean100[0] && allSubmissions[gradingStudentId].reports.report2.popKorean100[0].song) || ''))) || '작성된 내용이 없습니다.'
+                  ),
+                  e('div', { className: 'text-2xs text-purple-800 bg-purple-50 p-2.5 rounded-lg space-y-1' },
+                    e('p', null, e('strong', null, 'AI 질문: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.aiLog && allSubmissions[gradingStudentId].reports.report2.aiLog.prompt) || '없음'),
+                    e('p', null, e('strong', null, '비판 검증: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.aiLog && allSubmissions[gradingStudentId].reports.report2.aiLog.criticalReview) || '없음'),
+                    allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.aiLog && allSubmissions[gradingStudentId].reports.report2.aiLog.screenshotImg && e('div', { className: 'pt-1' },
+                      e('span', { className: 'font-bold text-purple-900 block mb-0.5' }, '캡처 사진:'),
+                      e('img', { src: allSubmissions[gradingStudentId].reports.report2.aiLog.screenshotImg, alt: 'AI 캡처', className: 'max-h-24 rounded border border-purple-200' })
+                    )
+                  )
+                )
+              ),
+
+              // 5점 급간 채점표 (과제1 30점 + 과제2 30점)
+              e('div', { className: 'p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4' },
+                e('div', { className: 'flex items-center justify-between' },
+                  e('h4', { className: 'font-extrabold text-slate-900 text-sm' }, '개인 탐구 5점 급간 채점 배점표'),
+                  e('span', { className: 'font-mono font-black text-indigo-600 text-sm' },
+                    '현재 합산 총점: ' + (Number(gradingForm.r1_content) + Number(gradingForm.r1_analysis) + Number(gradingForm.r2_content) + Number(gradingForm.r2_analysis)) + ' / 60점'
+                  )
+                ),
+
+                // 과제 1 (30점 만점)
+                e('div', { className: 'p-4 bg-white rounded-xl border border-slate-200 space-y-3' },
+                  e('div', { className: 'flex items-center justify-between' },
+                    e('span', { className: 'font-bold text-slate-900' }, '과제 1 평가 배점 (30점 만점)'),
+                    e('span', { className: 'font-bold text-indigo-600' }, '과제 1 소계: ' + (Number(gradingForm.r1_content) + Number(gradingForm.r1_analysis)) + '점')
+                  ),
+                  e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+                    e('div', null,
+                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '탐구 내용 일치성 및 충실도 (15점)'),
+                      e('select', {
+                        value: gradingForm.r1_content,
+                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r1_content: Number(ev.target.value) })); },
+                        className: 'w-full p-2 border rounded-lg bg-white'
+                      },
+                        e('option', { value: 15 }, '15점 - 탐구 내용이 주제와 일치하고 매우 충실함'),
+                        e('option', { value: 10 }, '10점 - 대체로 일치하나 일부 보완이 필요함'),
+                        e('option', { value: 5 }, '5점 - 탐구 내용이 미흡하거나 주제와 불일치함')
+                      )
+                    ),
+                    e('div', null,
+                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '자료 분석 및 AI 비판 검증 (15점)'),
+                      e('select', {
+                        value: gradingForm.r1_analysis,
+                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r1_analysis: Number(ev.target.value) })); },
+                        className: 'w-full p-2 border rounded-lg bg-white'
+                      },
+                        e('option', { value: 15 }, '15점 - 자료 분석 및 AI 비판적 검증/캡처 완비'),
+                        e('option', { value: 10 }, '10점 - 자료 분석은 있으나 AI 검증 내용이 미흡함'),
+                        e('option', { value: 5 }, '5점 - 단순 복사 또는 자료 분석에 오류가 많음')
+                      )
+                    )
+                  )
+                ),
+
+                // 과제 2 (30점 만점)
+                e('div', { className: 'p-4 bg-white rounded-xl border border-slate-200 space-y-3' },
+                  e('div', { className: 'flex items-center justify-between' },
+                    e('span', { className: 'font-bold text-slate-900' }, '과제 2 평가 배점 (30점 만점)'),
+                    e('span', { className: 'font-bold text-indigo-600' }, '과제 2 소계: ' + (Number(gradingForm.r2_content) + Number(gradingForm.r2_analysis)) + '점')
+                  ),
+                  e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+                    e('div', null,
+                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '탐구 내용 일치성 및 충실도 (15점)'),
+                      e('select', {
+                        value: gradingForm.r2_content,
+                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r2_content: Number(ev.target.value) })); },
+                        className: 'w-full p-2 border rounded-lg bg-white'
+                      },
+                        e('option', { value: 15 }, '15점 - 탐구 내용이 주제와 일치하고 매우 충실함'),
+                        e('option', { value: 10 }, '10점 - 대체로 일치하나 일부 보완이 필요함'),
+                        e('option', { value: 5 }, '5점 - 탐구 내용이 미흡하거나 주제와 불일치함')
+                      )
+                    ),
+                    e('div', null,
+                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '자료 분석 및 AI 비판 검증 (15점)'),
+                      e('select', {
+                        value: gradingForm.r2_analysis,
+                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r2_analysis: Number(ev.target.value) })); },
+                        className: 'w-full p-2 border rounded-lg bg-white'
+                      },
+                        e('option', { value: 15 }, '15점 - 자료 분석 및 AI 비판적 검증/캡처 완비'),
+                        e('option', { value: 10 }, '10점 - 자료 분석은 있으나 AI 검증 내용이 미흡함'),
+                        e('option', { value: 5 }, '5점 - 단순 복사 또는 자료 분석에 오류가 많음')
+                      )
+                    )
+                  )
+                )
+              ),
+
+              // 세특 피드백
+              e('div', null,
+                e('label', { className: 'block font-bold text-slate-800 mb-1' }, '학교생활기록부 세부능력 및 특기사항(세특) 메모'),
+                e('textarea', {
+                  rows: 3,
+                  value: gradingForm.teacherFeedback,
+                  onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { teacherFeedback: ev.target.value })); },
+                  placeholder: '학생의 비판적 검증 태도, 융합적 탐구 역량, 음악적 통찰 등을 세특용 문장으로 기록하세요.',
+                  className: 'w-full p-3 border rounded-xl text-xs bg-white leading-relaxed'
+                })
+              )
+            ),
+
+            e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
+              e('button', { onClick: function() { setGradingStudentId(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, '취소'),
+              e('button', { onClick: saveTeacherGrading, className: 'px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' }, '채점 완료 및 점수 저장')
+            )
+          )
+        ),
+
+        // [기기 간 데이터 백업/불러오기 모달]
+        showSyncModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm' },
+          e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full space-y-4 shadow-2xl' },
+            e('div', { className: 'flex items-center justify-between pb-2 border-b' },
+              e('div', { className: 'flex items-center gap-2' },
+                e('i', { className: 'fa-solid fa-cloud-arrow-down text-teal-600' }),
+                e('h3', { className: 'text-sm font-black text-slate-900' }, '다른 기기에서 데이터 불러오기')
+              ),
+              e('button', { onClick: function() { setShowSyncModal(false); }, className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
+              )
+            ),
+            e('p', { className: 'text-xs text-slate-600 leading-relaxed' },
+              '학교 PC나 다른 스마트폰에서 복사해 둔 [백업 코드]를 여기에 붙여넣으면, 지금까지 작성한 모든 보고서와 계정 정보가 이 기기로 즉시 동기화됩니다.'
+            ),
+            e('textarea', {
+              rows: 5,
+              placeholder: '복사한 백업 코드를 여기에 붙여넣으세요...',
+              value: syncCodeInput,
+              onChange: function(ev) { setSyncCodeInput(ev.target.value); },
+              className: 'w-full p-3 border rounded-xl font-mono text-2xs bg-slate-50'
+            }),
+            e('button', { onClick: importSyncData, className: 'w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow' },
+              '이 기기로 데이터 동기화 완료하기'
             )
           )
         ),
