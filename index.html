@@ -19,6 +19,12 @@
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     .text-2xs { font-size: 0.6875rem; line-height: 0.95rem; }
     .variable-box { font-size: 0.725rem; line-height: 1.15rem; }
+    /* 회색 반투명 플레이스홀더 스타일 */
+    textarea::placeholder, input::placeholder {
+      color: #94a3b8;
+      opacity: 0.75;
+      font-weight: 400;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
@@ -76,6 +82,12 @@
       { id: 'history', name: '한국사' },
       { id: 'pe', name: '체육' },
       { id: 'art', name: '미술' }
+    ];
+
+    // 대중음악사 10년 단위 연대 목록 (1920s ~ 2020s, 총 11개 구간)
+    const POP_ERAS = [
+      '1920년대', '1930년대', '1940년대', '1950년대', '1960년대',
+      '1970년대', '1980년대', '1990년대', '2000년대', '2010년대', '2020년대'
     ];
 
     // =========================================================
@@ -194,18 +206,6 @@
       { id: 'ref_9', name: '경기민요', musicTrait: '서울과 경기 지역의 민요로, 비교적 맑고 경쾌한 선율이 특징입니다. 도라지타령, 늴리리야 등이 알려져 있습니다.', howToDevelop: '대표곡 악보와 반주 음원, 가사 해설을 담은 학습 키트, 따라 부르기 앱형 콘텐츠를 만듭니다.', impact: '지역 음악의 특징을 비교해 이해하고 노래 부르기를 통해 전통 발성을 경험합니다.', precaution: '음원의 저작인접권 확인 및 전통 창법(시김새)과 서양 발성의 차이점 명시' },
       { id: 'ref_10', name: '퓨전·창작국악', musicTrait: '전통 음악 요소를 현대 장르와 결합한 음악입니다. 판소리 수궁가를 활용한 이날치 밴드의 범 내려온다가 대중적으로 알려진 사례입니다.', howToDevelop: '전통 선율을 샘플링해 학생이 직접 편곡하는 창작 키트나 챌린지 콘텐츠를 만듭니다. 원곡 저작권 확인이 필요합니다.', impact: '전통의 현대적 재해석 경험과 창작 역량, 대중과의 접점을 넓힐 수 있습니다.', precaution: '원곡의 저작권 및 2차적 저작물 작성권 확인, 상업적 활용 시 이용 허락 절차 필수' }
     ];
-
-    // =========================================================
-    // [주제 3] 대중음악사 & 미래 음악 예측 단일 마스터 데이터
-    // =========================================================
-    const FULL_POP_MASTER_DATA = {
-      id: 'pop_master_card',
-      title: '우리나라 대중음악사 정리 & 2030 미래 음악 예측',
-      badge: '통합 평가 워크시트',
-      koreanHistory: '1920년대(윤심덕 사의 찬미, 유성기 음반) → 1930년대(눈물 젖은 두만강, 목포의 눈물, 트로트 정립) → 1950년대(굳세어라 금순아, 미8군 무대) → 1970년대(아침이슬, 청년 통기타 포크) → 1990년대(서태지와 아이들, 1세대 기획형 아이돌) → 2020년대(숏폼 챌린지 및 이지리스닝).',
-      globalComparison: '동시대 글로벌 대중음악은 재즈 에이지(1920년대) → 스윙 재즈(1930년대) → 로큰롤 혁명(1950년대) → 디스코와 하드록(1970년대) → 힙합과 얼터너티브 록(1990년대) → 숏폼 친화적 초단축 팝(2020년대)으로 전개됨. 한국은 해외 사조를 주체적으로 수용하며 독창적 케이팝 문법으로 발전시킴.',
-      futurePrediction: '1) 창작 주체: 인공지능 알고리즘과 생체 신호가 실시간 연동된 맞춤형 사운드 일상화.\n2) 음악 형식: 정형화된 절-후렴 탈피 및 1분 미만의 초단축 공간음향 루프 중심 재편.\n3) 음악 가치: 기계음 범람에 지친 대중들이 인간의 떨리는 숨소리와 어쿠스틱 원테이크 라이브에 최고 가치 부여.'
-    };
 
     // =========================================================
     // [주제 4] 국악·서양음악 이론 심화 교차 실증 탐구 10선 (고교 수준)
@@ -359,13 +359,6 @@
         } catch(err) { return FULL_PRODUCT_REF_DATA; }
       });
 
-      const [popHistoryDataState, setPopHistoryDataState] = useState(function() {
-        try {
-          const s = localStorage.getItem('music_custom_pop_data');
-          return s ? JSON.parse(s) : FULL_POP_MASTER_DATA;
-        } catch(err) { return FULL_POP_MASTER_DATA; }
-      });
-
       const [eastWestDataState, setEastWestDataState] = useState(function() {
         try {
           const s = localStorage.getItem('music_custom_eastwest_data');
@@ -399,6 +392,10 @@
       const [selectedSubject, setSelectedSubject] = useState('all');
       const [toastMessage, setToastMessage] = useState('');
 
+      // 기기 간 백업/동기화 팝업 상태
+      const [showSyncModal, setShowSyncModal] = useState(false);
+      const [syncCodeInput, setSyncCodeInput] = useState('');
+
       const updateCurrentUserSession = function(user) {
         setCurrentUser(user);
         if (user) {
@@ -409,6 +406,8 @@
       };
 
       const [activeReportModal, setActiveReportModal] = useState(false);
+      // 플레이스홀더(회색 반투명 가이드) 전용 상태
+      const [reportPlaceholders, setReportPlaceholders] = useState({});
       const [reportForm, setReportForm] = useState({
         slot: 'report1',
         topicCategory: 'inquiry',
@@ -424,22 +423,22 @@
         productHow: '',
         productImpact: '',
         productPrecaution: '',
-        popRecords: '',
-        popTraits: ['', '', ''],
-        popTopSongs: [{ title: '', reason: '' }, { title: '', reason: '' }, { title: '', reason: '' }],
-        popFuture: ['', '', ''],
+        // 주제 3 전용 1920s~2020s 11개 구간 배열
+        popKorean100: Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
+        popGlobal100: Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
+        popFutureThree: { creator: '', form: '', value: '' },
         // 주제 4 전용 5단계 필드
-        ewStep1Theory: '',       // 1. 이론 학습 (서양 이론 vs 국악 이론 요약)
-        ewStep2Hypothesis: '',   // 2. 탐구 영역 선택 및 가설 설정
-        ewStep3Variables: '',    // 3. 변인 통제 설정 (독립/종속/통제)
-        ewStep4Empirical: '',    // 4. 실증 (측정 방법 및 데이터 결과)
-        ewStep5Comparison: '',   // 5. 두 체계의 같은 점과 다른 점 비교 및 한계
+        ewStep1Theory: '',
+        ewStep2Hypothesis: '',
+        ewStep3Variables: '',
+        ewStep4Empirical: '',
+        ewStep5Comparison: '',
         aiLog: { prompt: '', criticalReview: '', screenshotImg: '' }
       });
 
       const showToast = function(msg) {
         setToastMessage(msg);
-        setTimeout(function() { setToastMessage(''); }, 2500);
+        setTimeout(function() { setToastMessage(''); }, 2600);
       };
 
       const getStudentAccounts = function() {
@@ -532,9 +531,6 @@
           const updated = productDataState.map(function(it) { return it.id === editingItemForm.id ? editingItemForm : it; });
           setProductDataState(updated);
           localStorage.setItem('music_custom_product_data', JSON.stringify(updated));
-        } else if (editingItemCategory === 'pop_history') {
-          setPopHistoryDataState(editingItemForm);
-          localStorage.setItem('music_custom_pop_data', JSON.stringify(editingItemForm));
         } else if (editingItemCategory === 'east_west') {
           const updated = eastWestDataState.map(function(it) { return it.id === editingItemForm.id ? editingItemForm : it; });
           setEastWestDataState(updated);
@@ -551,6 +547,55 @@
         setActiveItemEditModal(true);
       };
 
+      // 기기 간 데이터 백업 코드 생성 및 복사
+      const exportSyncData = function() {
+        if (!currentUser) return;
+        const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
+        const sData = allSubmissions[userKey];
+        if (!sData) { showToast('백업할 작성 내용이 없습니다.'); return; }
+        const exportObj = {
+          user: currentUser,
+          submission: sData,
+          exportedAt: new Date().toISOString()
+        };
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(exportObj))));
+        navigator.clipboard.writeText(encoded).then(function() {
+          showToast('내 탐구 데이터 백업 코드가 클립보드에 복사되었습니다! 다른 기기에서 불러오세요. 📋');
+        }).catch(function() {
+          prompt('아래 백업 코드를 복사하세요:', encoded);
+        });
+      };
+
+      // 다른 기기에서 백업 코드로 불러와 동기화
+      const importSyncData = function() {
+        if (!syncCodeInput.trim()) { showToast('백업 코드를 입력해 주세요.'); return; }
+        try {
+          const decoded = JSON.parse(decodeURIComponent(escape(atob(syncCodeInput.trim()))));
+          if (!decoded.submission || !decoded.user) {
+            showToast('올바른 백업 코드 형식이 아닙니다.');
+            return;
+          }
+          const userKey = decoded.user.id;
+          const up = Object.assign({}, allSubmissions, { [userKey]: decoded.submission });
+          setAllSubmissions(up);
+          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+
+          // 계정도 함께 동기화
+          const accs = getStudentAccounts();
+          if (decoded.user.role === 'student' && !accs[userKey]) {
+            accs[userKey] = { id: userKey, name: decoded.user.name, pw: '0000' };
+            localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+          }
+
+          setShowSyncModal(false);
+          setSyncCodeInput('');
+          showToast(decoded.user.name + ' 학생의 탐구 데이터가 이 기기로 완벽히 동기화되었습니다! 🔄');
+        } catch(err) {
+          showToast('코드 해석에 실패했습니다. 코드를 다시 확인해 주세요.');
+        }
+      };
+
+      // [핵심 변경] 추천 카드를 클릭했을 때 기존 내용이 회색 반투명 플레이스홀더로 뜨고, 글씨를 쓰면 새로워지도록 설정
       const openReportModal = function(categoryType, item, defaultSlot) {
         if (!currentUser) {
           showToast('로그인 후 점검 및 작성을 진행할 수 있습니다.');
@@ -561,43 +606,55 @@
         const slot = defaultSlot || (!sData.reports || !sData.reports.report1 ? 'report1' : 'report2');
         const ex = sData.reports ? sData.reports[slot] : null;
 
+        // 회색 반투명 가이드(플레이스홀더) 설정
+        const ph = {
+          topicTitle: (item && (item.title || item.question || item.name)) || '탐구/기획 주제명을 입력하세요',
+          coreConcept: (item && item.concept) || '교과목명 및 교과서 속 핵심 개념',
+          hypothesis: (item && item.hypothesis) || '만약 ~라면, ~할 것이다 (인과관계 명시)',
+          variables: (item && (typeof item.variables === 'string' ? item.variables : '독립변인: ... / 종속변인: ... / 통제변인: ...')) || '독립변인: ... / 종속변인: ... / 통제변인: ...',
+          procedure: (item && item.activity) || '스마트폰 측정 앱 활용 및 수집된 정량적 데이터 기록',
+          conclusion: '가설 검증 결과 및 음악 감상·학교 환경에 미치는 시사점',
+          limitations: '표본 수의 한계, 앱 측정 오차, 통제하지 못한 변인, 상관과 인과의 차이 등',
+          brandName: (item && (item.brandName || item.name)) || '문화유산명 및 기획 상품명',
+          productTrait: (item && item.musicTrait) || '문화유산의 역사적 배경, 악기 구성, 장단의 변화 등',
+          productHow: (item && item.howToDevelop) || '어떤 기술로 구현하며 어떻게 체험하도록 할 것인가',
+          productImpact: (item && item.impact) || '협동심, 리듬감, 전통에 대한 친숙도 등 기대 효과',
+          productPrecaution: (item && item.precaution) || '저작권, 안전 수칙, 실제 성과 검증 필요성 등',
+          ewStep1Theory: (item && ('[핵심 개념] ' + (item.concept || '') + '\n[두 체계의 차이] ' + (item.twoSystemsDiff || ''))) || '서양 이론 요약 및 국악 이론 요약 (두 체계의 소리 다루는 기본 원리)',
+          ewStep2Hypothesis: (item && ('[영역: ' + (item.area || '선택') + '] ' + (item.hypothesis || ''))) || '선택 영역 및 두 이론의 차이를 검증할 수 있는 구체적 가설',
+          ewStep3Variables: (item && (typeof item.variables === 'string' ? item.variables : '독립변인 / 종속변인 / 통제변인')) || '독립변인 / 종속변인 / 통제변인',
+          ewStep4Empirical: (item && item.activity) || '수학적 계산표, 오디오 프로그램 측정 시간, 설문 결과 데이터',
+          ewStep5Comparison: '‘어느 쪽이 더 낫다’가 아닌, 각 체계가 무엇을 기준으로 소리를 다루는지를 자료로 비교하고 한계점 서술'
+        };
+        setReportPlaceholders(ph);
+
+        // 만약 이전에 학생이 "직접 저장한 내용"이 있다면 그 내용을 value로 띄우고,
+        // 카드를 처음 클릭해 들어온 경우라면 value를 깨끗이 비워 placeholder(회색 반투명)가 보이게 함!
         setReportForm({
           slot: slot,
           topicCategory: categoryType,
-          topicTitle: (ex && ex.topicTitle) || (item && (item.title || item.question || item.name)) || '',
-          coreConcept: (ex && ex.coreConcept) || (item && (item.concept || item.koreanHistory)) || '',
-          hypothesis: (ex && ex.hypothesis) || (item && item.hypothesis) || '',
-          variables: (ex && ex.variables) || (item && item.variables) || '',
-          procedure: (ex && ex.procedure) || (item && (item.activity || item.globalComparison)) || '',
+          topicTitle: (ex && ex.topicTitle) || '',
+          coreConcept: (ex && ex.coreConcept) || '',
+          hypothesis: (ex && ex.hypothesis) || '',
+          variables: (ex && ex.variables) || '',
+          procedure: (ex && ex.procedure) || '',
           conclusion: (ex && ex.conclusion) || '',
           limitations: (ex && ex.limitations) || '',
-          brandName: (ex && ex.brandName) || (item && (item.brandName || item.name)) || '',
-          productTrait: (ex && ex.productTrait) || (item && item.musicTrait) || '',
-          productHow: (ex && ex.productHow) || (item && item.howToDevelop) || '',
-          productImpact: (ex && ex.productImpact) || (item && item.impact) || '',
-          productPrecaution: (ex && ex.productPrecaution) || (item && item.precaution) || '',
-          popRecords: (ex && ex.popRecords) || (item && item.koreanHistory) || '',
-          popTraits: (ex && ex.popTraits) || [
-            '1) 장르: 포크와 트로트에서 댄스 팝, 힙합, 숏폼 중심의 초단축 이지리스닝으로 다변화됨.',
-            '2) 매체: LP와 카세트에서 CD, MP3, 스트리밍, 숏폼 알고리즘으로 소비 형태가 이동함.',
-            '3) 가사: 시대적 애환과 서정성 중심에서 세계관 스토리텔링 및 챌린지 킬링 파트로 변화함.'
-          ],
-          popTopSongs: (ex && ex.popTopSongs) || [
-            { title: '윤심덕 - 사의 찬미(1926)', reason: '서양 왈츠를 수용한 한국 최초의 근대 대중가요' },
-            { title: '서태지와 아이들 - 난 알아요(1992)', reason: '랩과 댄스를 한국 주류에 안착시키며 케이팝 원형 창시' },
-            { title: '뉴진스 - Ditto(2022)', reason: '숏폼 친화적 초단축 음원과 뉴트로 이지리스닝의 대표작' }
-          ],
-          popFuture: (ex && ex.popFuture) || [
-            '1) 창작 주체: 인공지능 알고리즘과 생체 신호가 실시간 연동된 맞춤형 사운드 일상화.',
-            '2) 음악 형식: 정형화된 절-후렴 탈피 및 1분 미만의 초단축 공간음향 루프 중심 재편.',
-            '3) 음악 가치: 기계음 범람에 지친 대중들이 인간의 떨리는 숨소리와 어쿠스틱 원테이크 라이브에 최고 가치 부여.'
-          ],
-          // 주제 4 전용 5단계 입력 폼
-          ewStep1Theory: (ex && ex.ewStep1Theory) || (item ? ('[핵심 개념] ' + (item.concept || '') + '\n[두 체계의 차이] ' + (item.twoSystemsDiff || '')) : ''),
-          ewStep2Hypothesis: (ex && ex.ewStep2Hypothesis) || (item && ('[영역: ' + (item.area || '선택영역') + '] ' + item.hypothesis)) || '',
-          ewStep3Variables: (ex && ex.ewStep3Variables) || (item && item.variables) || '',
-          ewStep4Empirical: (ex && ex.ewStep4Empirical) || (item && item.activity) || '',
-          ewStep5Comparison: (ex && ex.ewStep5Comparison) || (ex && ex.limitations) || '',
+          brandName: (ex && ex.brandName) || '',
+          productTrait: (ex && ex.productTrait) || '',
+          productHow: (ex && ex.productHow) || '',
+          productImpact: (ex && ex.productImpact) || '',
+          productPrecaution: (ex && ex.productPrecaution) || '',
+          // 주제 3 1920s ~ 2020s 11개 구간
+          popKorean100: (ex && ex.popKorean100) || Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
+          popGlobal100: (ex && ex.popGlobal100) || Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
+          popFutureThree: (ex && ex.popFutureThree) || { creator: '', form: '', value: '' },
+          // 주제 4
+          ewStep1Theory: (ex && ex.ewStep1Theory) || '',
+          ewStep2Hypothesis: (ex && ex.ewStep2Hypothesis) || '',
+          ewStep3Variables: (ex && ex.ewStep3Variables) || '',
+          ewStep4Empirical: (ex && ex.ewStep4Empirical) || '',
+          ewStep5Comparison: (ex && ex.ewStep5Comparison) || '',
           aiLog: (ex && ex.aiLog) || { prompt: '', criticalReview: '', screenshotImg: '' }
         });
         setActiveReportModal(true);
@@ -736,7 +793,15 @@
               currentUser ? e('div', { className: 'flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl text-xs font-bold' },
                 e('i', { className: 'fa-solid fa-user text-slate-500' }),
                 e('span', null, currentUser.name + ' (' + currentUser.id + ')'),
-                e('button', { onClick: handleLogout, className: 'text-slate-400 hover:text-rose-600 ml-1', title: '로그아웃' }, e('i', { className: 'fa-solid fa-right-from-bracket' }))
+                e('button', { onClick: exportSyncData, className: 'text-indigo-600 hover:text-indigo-800 ml-1', title: '다른 기기 동기화용 백업 코드 복사' },
+                  e('i', { className: 'fa-solid fa-cloud-arrow-up' })
+                ),
+                e('button', { onClick: function() { setShowSyncModal(true); }, className: 'text-teal-600 hover:text-teal-800 ml-1', title: '다른 기기 데이터 불러오기' },
+                  e('i', { className: 'fa-solid fa-cloud-arrow-down' })
+                ),
+                e('button', { onClick: handleLogout, className: 'text-slate-400 hover:text-rose-600 ml-1', title: '로그아웃' },
+                  e('i', { className: 'fa-solid fa-right-from-bracket' })
+                )
               ) : e('button', { onClick: function() { setShowTeacherModal(true); }, className: 'px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5' },
                 e('i', { className: 'fa-solid fa-shield-halved text-purple-600' }),
                 e('span', null, '교사 관리자 모드')
@@ -780,7 +845,7 @@
           e('div', { className: 'max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3' },
             e('div', { className: 'flex items-center gap-2 text-xs' },
               e('i', { className: 'fa-solid fa-lock text-amber-400' }),
-              e('span', null, '학생 탐구 작성 및 수행평가 제출을 위해 학번(4자리)과 비밀번호(4자리)로 로그인해 주세요.')
+              e('span', null, '학생 탐구 작성 및 수행평가 제출을 위해 학번(4자리)과 비밀번호(4자리)로 로그인해 주세요. (기기 내 안전 영구 보존)')
             ),
             isRegisterMode ? e('form', { onSubmit: handleStudentRegister, className: 'flex items-center gap-1.5' },
               e('input', { type: 'text', maxLength: 4, placeholder: '학번 4자리', value: studentIdInput, onChange: function(ev) { setStudentIdInput(ev.target.value); }, className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
@@ -834,7 +899,7 @@
                     e('p', { className: 'text-amber-800 font-semibold' }, '· 확인 필요 표시: 역사적 사실, 곡 정보, 이론 용어 중 추가 검증이 필요한 부분은 교과서·원자료로 반드시 재확인하세요.')
                   )
                 ),
-                e('button', { onClick: function() { openReportModal('inquiry', { title: '자율 융합 탐구 주제' }); }, className: 'mt-3 w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs shadow hover:bg-indigo-700 transition' }, '+ 자율 융합 보고서 쓰기')
+                e('button', { onClick: function() { openReportModal('inquiry', { question: '자율 융합 탐구 주제' }); }, className: 'mt-3 w-full py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs shadow hover:bg-indigo-700 transition' }, '+ 자율 융합 보고서 쓰기')
               ),
               // 교과 융합 카드 목록 (80선)
               inquiryDataState.filter(function(it) { return selectedSubject === 'all' || it.subjectId === selectedSubject; }).map(function(item) {
@@ -874,6 +939,7 @@
                       e('strong', { className: 'text-slate-700 mr-1' }, '측정·활동 방법:'), item.activity
                     )
                   ),
+                  // 클릭 시 내용이 회색 반투명 상태로 보이고 타이핑 시 새로워지도록 연동
                   e('button', { onClick: function() { openReportModal('inquiry', item); }, className: 'mt-4 w-full py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition' }, '이 주제로 보고서 작성')
                 );
               })
@@ -895,7 +961,7 @@
                   e('h3', { className: 'text-base font-bold text-emerald-950 mt-2 mb-1' }, '내가 직접 선정한 문화유산으로 새 상품 기획하기'),
                   e('p', { className: 'text-xs text-emerald-900/80 leading-relaxed' }, '음악 교과서나 우리 전통·세계 문화유산 중 원하는 악곡/악기를 자유롭게 선정하여 상품명, 음악적 특징, 개발 방식, 기대 효과 및 유의할 점을 기획합니다.')
                 ),
-                e('button', { onClick: function() { openReportModal('product', { title: '자율 선정 문화유산 상품 기획' }); }, className: 'mt-4 w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition' }, '+ 선택지 1: 자율 문화유산 기획서 쓰기')
+                e('button', { onClick: function() { openReportModal('product', { name: '자율 선정 문화유산 상품 기획' }); }, className: 'mt-4 w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition' }, '+ 선택지 1: 자율 문화유산 기획서 쓰기')
               ),
               e('div', { className: 'bg-gradient-to-br from-teal-50 to-white rounded-2xl border-2 border-emerald-300 p-5 flex flex-col justify-between shadow-sm' },
                 e('div', null,
@@ -903,7 +969,7 @@
                   e('h3', { className: 'text-base font-bold text-teal-950 mt-2 mb-1' }, '하단 10가지 예시자료를 참고하여 나만의 아이디어로 기획하기'),
                   e('p', { className: 'text-xs text-teal-900/80 leading-relaxed' }, '아래 안내된 사물놀이, 강강술래, 시나위, 해녀의 노래 등 10개 예시 카드의 특징을 충분히 검토한 뒤, 이를 바탕으로 창의적인 상품·프로그램 기획서를 완성합니다.')
                 ),
-                e('button', { onClick: function() { openReportModal('product', { title: '문화유산 예시 자료 기반 상품 기획' }); }, className: 'mt-4 w-full py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs shadow transition' }, '+ 선택지 2: 예시자료 바탕 기획서 쓰기')
+                e('button', { onClick: function() { openReportModal('product', { name: '문화유산 예시 자료 기반 상품 기획' }); }, className: 'mt-4 w-full py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs shadow transition' }, '+ 선택지 2: 예시자료 바탕 기획서 쓰기')
               )
             ),
             e('div', { className: 'p-4 rounded-2xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900 space-y-1' },
@@ -920,7 +986,7 @@
             e('div', { className: 'space-y-3' },
               e('h3', { className: 'text-sm font-extrabold text-slate-800 flex items-center gap-1.5' },
                 e('i', { className: 'fa-solid fa-book-open-reader text-emerald-600' }),
-                e('span', null, '참고용 예시 자료 10선 (아이디어 발상 참고용)')
+                e('span', null, '참고용 예시 자료 10선 (순수 열람·발상 참고용)')
               ),
               e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
                 productDataState.map(function(item, idx) {
@@ -945,9 +1011,9 @@
                         )
                       )
                     ),
-                    e('div', { className: 'mt-3 pt-2 border-t border-slate-100 text-2xs text-slate-400 flex items-center justify-between' },
-                      e('span', null, '※ 위 자료를 바탕으로 상단 [선택지 2]를 눌러 기획서를 작성하세요.'),
-                      e('button', { onClick: function() { openReportModal('product', item); }, className: 'text-emerald-700 font-bold hover:underline' }, '이 예시 바탕으로 쓰기 →')
+                    // 요청에 따라 '이 예시 바탕으로 쓰기' 버튼 제거 및 안내 문구만 표기
+                    e('div', { className: 'mt-3 pt-2 border-t border-slate-100 text-2xs text-slate-400' },
+                      e('span', null, '※ 위 자료를 충분히 참고한 뒤, 상단 [선택지 1] 또는 [선택지 2]를 눌러 기획서를 작성하세요.')
                     )
                   );
                 })
@@ -955,67 +1021,75 @@
             )
           ),
 
-          // 탭 3: 주제 3. 대중음악사&미래 음악 예측
+          // 탭 3: 주제 3. 대중음악사&미래 음악 예측 (지침 및 서식 정비)
           mainTab === 'pop_history' && e('div', { className: 'space-y-4' },
             e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
               e('div', null,
                 e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 3. 대중음악사&미래 음악 예측 (1920s ~ 2020s & 2030+)'),
-                e('p', { className: 'text-xs text-slate-500' }, '100년의 한국 대중음악 흐름, 세계 동향 대조, 2030 미래 예측을 하나의 종합 과제로 탐구합니다.')
+                e('p', { className: 'text-xs text-slate-500' }, '우리나라 대중음악 100년사와 동시대 글로벌 사조를 대조하고, 2030 이후 미래 음악의 3대 측면을 예측합니다.')
               )
             ),
-            e('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-5' },
-              e('div', { className: 'bg-gradient-to-br from-teal-50 to-white rounded-2xl border-2 border-dashed border-teal-300 p-6 flex flex-col justify-between shadow-sm' },
-                e('div', null,
-                  e('span', { className: 'text-2xs font-extrabold px-2.5 py-1 rounded bg-teal-700 text-white' }, '선택지 01 · 자율 종합 탐구'),
-                  e('h3', { className: 'text-base font-bold text-teal-950 mt-3 mb-1.5' }, '나만의 시각으로 재구성하는 한국 대중음악사 & 미래 예측'),
-                  e('p', { className: 'text-xs text-teal-800/80 mb-3 leading-relaxed' }, '1920년대~2020년대 중 주목한 사건들을 연결하고, 동시대 서양 팝과의 비교 및 2030 미래 음악의 3대 예측(창작, 형식, 가치)을 직접 구성합니다.')
-                ),
-                e('button', { onClick: function() { openReportModal('pop_history', { title: '한국 대중음악 100년사 및 2030 미래 예측 자율 탐구' }); }, className: 'mt-4 w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow transition' }, '+ 자율 대중음악사 보고서 쓰기')
-              ),
-              e('div', { key: 'pop_master_card', className: 'relative bg-white rounded-2xl border-2 border-teal-200 p-6 flex flex-col justify-between shadow-sm hover:border-teal-400 transition' },
-                currentUser && currentUser.role === 'teacher' && e('button', {
-                  onClick: function(ev) { ev.stopPropagation(); openItemEditor('pop_history', popHistoryDataState); },
-                  className: 'absolute top-4 right-4 px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold text-2xs flex items-center gap-1 shadow-sm border border-purple-300 transition',
-                  title: '교사 권한 편집'
-                }, e('i', { className: 'fa-solid fa-pen text-2xs' }), e('span', null, '편집')),
 
-                e('div', null,
-                  e('div', { className: 'flex items-center justify-between mb-2' },
-                    e('span', { className: 'text-xs font-black px-2.5 py-1 rounded bg-teal-700 text-white' }, popHistoryDataState.badge || '통합 평가 워크시트 (참고용)'),
-                    e('span', { className: 'text-2xs font-mono text-slate-400' }, '100 Years & Future')
+            // 지침 안내 배너 (빨간색 경고 문구 포함)
+            e('div', { className: 'p-4 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-1.5 text-xs text-teal-950' },
+              e('div', { className: 'flex items-center gap-1.5 font-black text-teal-900' },
+                e('i', { className: 'fa-solid fa-circle-info text-teal-600' }),
+                e('span', null, '주제 3 보고서 작성 지침')
+              ),
+              e('p', { className: 'text-2xs text-teal-900/90 leading-relaxed' },
+                '· 작성 순서: 우리나라 대중음악사 정리(역사, 음악) → 글로벌 대중음악사 정리(역사, 음악) → 2030년 이후 미래 음악 예측 순서로 작성합니다.'
+              ),
+              e('p', { className: 'text-xs font-bold text-rose-600 leading-relaxed' },
+                '· 예시에 작성된 내용을 그대로 쓰지 않습니다.'
+              )
+            ),
+
+            e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-5' },
+              e('div', { className: 'bg-gradient-to-br from-teal-50 to-white rounded-3xl border-2 border-dashed border-teal-400 p-6 flex flex-col justify-between shadow-sm' },
+                e('div', { className: 'space-y-3' },
+                  e('span', { className: 'text-2xs font-extrabold px-2.5 py-1 rounded bg-teal-700 text-white' }, '선택지 01 · 대중음악사 종합 탐구'),
+                  e('h3', { className: 'text-base font-bold text-teal-950' }, '우리나라 100년사 + 글로벌 100년사 + 2030 미래 예측'),
+                  e('p', { className: 'text-xs text-teal-900/80 leading-relaxed' },
+                    '1920년대부터 2020년대까지 10년 단위로 우리나라와 글로벌 대중음악의 대표곡과 대표적 사건/시대상을 순차적으로 정리하고, 2030년 이후 미래 음악을 3대 측면(창작 주체, 음악 형식, 음악 가치)으로 예측하여 작성합니다.'
                   ),
-                  e('h3', { className: 'text-base font-bold text-slate-900 mb-3 pr-12 leading-snug' }, popHistoryDataState.title),
-                  e('div', { className: 'space-y-3 text-xs text-slate-700 mb-2' },
-                    e('div', { className: 'p-3 bg-teal-50/50 rounded-xl border border-teal-100 space-y-1' },
-                      e('strong', { className: 'text-teal-900 block font-bold' }, '1. 우리나라 대중음악 100년사 정리 (1920s ~ 2020s)'),
-                      e('p', { className: 'text-2xs text-slate-600 leading-relaxed' }, popHistoryDataState.koreanHistory)
-                    ),
-                    e('div', { className: 'p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1' },
-                      e('strong', { className: 'text-slate-900 block font-bold' }, '2. 동시대 글로벌 대중음악 동향 대조'),
-                      e('p', { className: 'text-2xs text-slate-600 leading-relaxed' }, popHistoryDataState.globalComparison)
-                    ),
-                    e('div', { className: 'p-3 bg-teal-50/30 rounded-xl border border-teal-100 space-y-1' },
-                      e('strong', { className: 'text-teal-900 block font-bold' }, '3. 2030년 이후 미래 음악 예측'),
-                      e('p', { className: 'text-2xs text-slate-600 leading-relaxed whitespace-pre-line' }, popHistoryDataState.futurePrediction)
-                    )
+                  e('div', { className: 'p-3 bg-white/90 rounded-2xl border border-teal-200 text-2xs text-slate-700 space-y-1' },
+                    e('p', { className: 'font-bold text-teal-900' }, '1. 우리나라 대중음악 100년사 (1920s~2020s 각 대표곡/사건)'),
+                    e('p', { className: 'font-bold text-teal-900' }, '2. 글로벌 대중음악 100년사 (1920s~2020s 각 대표곡/사건)'),
+                    e('p', { className: 'font-bold text-teal-900' }, '3. 2030년 이후 미래 음악 예측 (창작 주체, 형식, 가치)')
                   )
                 ),
-                e('button', { onClick: function() { openReportModal('pop_history', popHistoryDataState); }, className: 'mt-4 w-full py-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 font-bold text-xs shadow-sm transition' }, '이 가이드를 바탕으로 보고서 작성')
+                e('button', {
+                  onClick: function() { openReportModal('pop_history', { title: '우리나라 및 글로벌 대중음악 100년사 정리와 2030 미래 음악 예측' }); },
+                  className: 'mt-5 w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow transition'
+                }, '+ 대중음악사 & 미래 예측 보고서 쓰기')
+              ),
+
+              // 참고용 요약 카드
+              e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 flex flex-col justify-between shadow-sm space-y-3' },
+                e('div', { className: 'space-y-2 text-xs' },
+                  e('div', { className: 'flex items-center justify-between pb-2 border-b' },
+                    e('h4', { className: 'font-bold text-slate-800' }, '시대별 대중음악사 100년 흐름 참고 요약'),
+                    e('span', { className: 'text-2xs font-mono text-slate-400' }, '1920s ~ 2020s')
+                  ),
+                  e('p', { className: 'text-2xs text-slate-600 leading-relaxed' },
+                    '· 1920s: 윤심덕 사의 찬미, 서양 왈츠 수용 / 미국 딕시랜드 재즈\n· 1930s: 김정구, 이난영 등 트로트 정립 / 대공황 스윙 재즈\n· 1950s: 현인 굳세어라 금순아, 미8군 쇼 / 미국 로큰롤 혁명\n· 1970s: 송창식, 김민기 통기타 포크 / 전 세계 디스코와 하드록\n· 1990s: 서태지와 아이들, 1세대 아이돌 / 힙합과 그런지 록\n· 2020s: 뉴진스, 숏폼 챌린지 및 이지리스닝 / 글로벌 초단축 팝'
+                  )
+                ),
+                e('div', { className: 'p-3 bg-slate-50 rounded-xl text-2xs text-slate-500' },
+                  e('span', { className: 'text-rose-600 font-bold block mb-1' }, '※ 주의'),
+                  e('span', null, '위 요약은 참고용일 뿐이며, 보고서 작성 시 본인만의 조사와 언어로 대표곡과 역사적 사건을 작성해야 합니다.')
+                )
               )
             )
           ),
 
-          // =========================================================
-          // [뷰 4] 주제 4. 국악·서양음악 이론 심화 교차 실증 탐구 (10선)
-          // =========================================================
+          // 탭 4: 주제 4. 국악·서양음악 이론 심화 탐구 (10선)
           mainTab === 'east_west' && e('div', { className: 'space-y-6' },
-            // 헤더 및 영역 선택 가이드
             e('div', { className: 'space-y-2 pb-4 border-b border-slate-200' },
               e('div', { className: 'flex items-center justify-between' },
                 e('h2', { className: 'text-lg font-black text-slate-900' }, '주제 4. 국악·서양음악 이론 심화 교차 실증 탐구 (10선)'),
                 e('span', { className: 'text-2xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800' }, '동서양 교차 실증')
               ),
-              // 요청하신 영역 선택 가이드
               e('div', { className: 'p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80 text-xs text-amber-950 space-y-1' },
                 e('span', { className: 'font-bold block text-amber-900 mb-0.5' }, '■ 탐구 영역 선택 가이드'),
                 e('p', { className: 'text-2xs text-amber-900/90' }, '· 조율: 수학 계산 중심이라 장비가 거의 필요 없습니다.'),
@@ -1026,7 +1100,6 @@
               )
             ),
 
-            // 선택지 1: 자율 맞비교 카드 (교차 실증 정의 + 5단계 진행 순서)
             e('div', { className: 'bg-gradient-to-br from-amber-50 to-white rounded-3xl border-2 border-dashed border-amber-400 p-6 shadow-sm space-y-4' },
               e('div', { className: 'flex items-center justify-between' },
                 e('span', { className: 'text-2xs font-extrabold px-2.5 py-1 rounded bg-amber-700 text-white' }, '선택지 01 · 자율 맞비교'),
@@ -1052,7 +1125,6 @@
               }, '+ 5단계 자율 맞비교 보고서 쓰기')
             ),
 
-            // 교차 실증 10선 카드 목록
             e('div', { className: 'space-y-3' },
               e('h3', { className: 'text-sm font-extrabold text-slate-800 flex items-center gap-1.5' },
                 e('i', { className: 'fa-solid fa-scale-balanced text-amber-600' }),
@@ -1072,9 +1144,8 @@
                         e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200' }, item.area || '교차 실증'),
                         e('span', { className: 'text-2xs font-mono text-slate-400' }, 'THEME ' + (idx + 1))
                       ),
-                      // 순수 제목만 표기 (태그 제거)
                       e('h3', { className: 'text-base font-bold text-slate-900 mb-2 pr-12 leading-snug' }, item.title),
-                      
+
                       e('div', { className: 'p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5 mb-2.5 text-xs' },
                         e('div', { className: 'text-slate-700 leading-relaxed' },
                           e('strong', { className: 'text-amber-900 font-bold mr-1' }, '핵심 개념:'), item.concept
@@ -1106,6 +1177,7 @@
                         e('strong', { className: 'text-slate-700 mr-1' }, '측정(실증) 방법:'), item.activity
                       )
                     ),
+                    // 클릭 시 내용이 회색 반투명 플레이스홀더 상태로 열리고 타이핑 시 새로워지도록 연동
                     e('button', {
                       onClick: function() { openReportModal('east_west', item); },
                       className: 'mt-4 w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition'
@@ -1116,7 +1188,7 @@
             )
           ),
 
-          // 학생 보고서 페이지
+          // 학생 보고서 종합 페이지
           mainTab === 'my_reports' && currentUser && currentUser.role === 'student' && e('div', { className: 'space-y-6' },
             e('div', { className: 'bg-gradient-to-r from-rose-900 to-indigo-950 rounded-3xl p-6 text-white' },
               e('h2', { className: 'text-xl font-black' }, currentUser.name + ' (' + currentUser.id + ') 님의 개인 탐구 2개 종합 정리'),
@@ -1141,7 +1213,7 @@
                       e('div', { className: 'p-3 bg-slate-50 rounded-xl space-y-1 mt-2 text-2xs text-slate-600' },
                         rep.topicCategory === 'inquiry' && e('p', null, '가설: ' + (rep.hypothesis || '미기재')),
                         rep.topicCategory === 'product' && e('p', null, '문화유산 및 아이템: ' + (rep.brandName || '미기재') + ' | 개발방식: ' + (rep.productHow || '미기재')),
-                        rep.topicCategory === 'pop_history' && e('p', null, '100년사 기록: ' + (rep.popRecords ? rep.popRecords.slice(0, 50) : '') + '...'),
+                        rep.topicCategory === 'pop_history' && e('p', null, '1920s: ' + ((rep.popKorean100 && rep.popKorean100[0] && rep.popKorean100[0].song) || '미기재')),
                         rep.topicCategory === 'east_west' && e('p', null, '실증 활동: ' + (rep.ewStep4Empirical ? rep.ewStep4Empirical.slice(0, 50) : '') + '...')
                       ),
                       e('div', { className: 'p-3 bg-purple-50 rounded-xl text-purple-900 mt-2 text-2xs space-y-1' },
@@ -1278,7 +1350,7 @@
           )
         ),
 
-        // 보고서 작성 모달 (주제별 맞춤 폼 + 주제4 전용 5단계 교차 실증 서식)
+        // 보고서 작성 모달 (주제 3 1920-2020 신규 서식 + 반투명 플레이스홀더 적용)
         activeReportModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
           e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
             e('div', { className: 'p-5 border-b border-slate-200 flex items-start justify-between bg-slate-50' },
@@ -1308,7 +1380,21 @@
                 e('p', { className: 'text-2xs leading-relaxed text-rose-700 font-semibold' }, '· 가설이 맞지 않았다면 이유를 분석합니다. 결과를 가설에 맞춰 억지로 고치지 않습니다.')
               ),
 
-              // 주제 4 마무리 지침 (교차 실증 보고서 작성 지침)
+              // [주제 3 전용 상단 지침: 빨간색 경고 문구 포함]
+              reportForm.topicCategory === 'pop_history' && e('div', { className: 'p-4 rounded-2xl bg-teal-50/80 border border-teal-200 space-y-1 text-teal-950' },
+                e('div', { className: 'flex items-center gap-1.5 font-black text-teal-900' },
+                  e('i', { className: 'fa-solid fa-circle-exclamation text-teal-600' }),
+                  e('span', null, '주제 3 보고서 작성 공식 지침')
+                ),
+                e('p', { className: 'text-2xs leading-relaxed text-teal-900/90' },
+                  '· 작성 순서: 우리나라 대중음악사 정리(역사, 음악) → 글로벌 대중음악사 정리(역사, 음악) → 2030년 이후 미래 음악 예측 순서로 작성합니다.'
+                ),
+                e('p', { className: 'text-xs font-bold text-rose-600 leading-relaxed' },
+                  '· 예시에 작성된 내용을 그대로 쓰지 않습니다.'
+                )
+              ),
+
+              // 주제 4 마무리 지침
               reportForm.topicCategory === 'east_west' && e('div', { className: 'p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200 text-amber-950 space-y-1' },
                 e('div', { className: 'flex items-center gap-1.5 font-bold text-amber-900' },
                   e('i', { className: 'fa-solid fa-scale-balanced text-amber-600' }),
@@ -1321,101 +1407,278 @@
 
               e('div', null,
                 e('label', { className: 'font-bold text-slate-800 block mb-1' }, '탐구/기획 주제명'),
-                e('input', { type: 'text', value: reportForm.topicTitle, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { topicTitle: ev.target.value })); }, className: 'w-full p-2.5 border rounded-xl font-bold bg-white' })
+                e('input', {
+                  type: 'text',
+                  placeholder: reportPlaceholders.topicTitle,
+                  value: reportForm.topicTitle,
+                  onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { topicTitle: ev.target.value })); },
+                  className: 'w-full p-2.5 border rounded-xl font-bold bg-white'
+                })
               ),
 
-              // [주제 1 전용 폼: 가설-변인통제-측정방법-결과-결론-한계]
+              // [주제 1 전용 폼: 회색 반투명 플레이스홀더 적용]
               reportForm.topicCategory === 'inquiry' && e('div', { className: 'space-y-3 bg-slate-50 p-4 rounded-2xl border' },
                 e('div', null,
                   e('label', { className: 'font-bold text-slate-700 block mb-1' }, '1. 연계 교과 및 핵심 이론 개념'),
-                  e('input', { type: 'text', placeholder: '교과목명 및 교과서 속 핵심 개념', value: reportForm.coreConcept, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { coreConcept: ev.target.value })); }, className: 'w-full p-2 border rounded-lg bg-white' })
+                  e('input', {
+                    type: 'text',
+                    placeholder: reportPlaceholders.coreConcept,
+                    value: reportForm.coreConcept,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { coreConcept: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
                 ),
                 e('div', null,
                   e('label', { className: 'font-bold text-slate-700 block mb-1' }, '2. 일상의 호기심 및 가설 설정'),
-                  e('textarea', { rows: 2, placeholder: '만약 ~라면, ~할 것이다 (인과관계 명시)', value: reportForm.hypothesis, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { hypothesis: ev.target.value })); }, className: 'w-full p-2 border rounded-lg bg-white' })
+                  e('textarea', {
+                    rows: 2,
+                    placeholder: reportPlaceholders.hypothesis,
+                    value: reportForm.hypothesis,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { hypothesis: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
                 ),
                 e('div', { className: 'p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-2' },
                   e('label', { className: 'font-bold text-indigo-900 block' }, '3. 변인 통제 설정 (과학적 실험 절차)'),
-                  e('input', { type: 'text', placeholder: '예: 독립변인: 공간 유형 / 종속변인: 잔향 시간(초) / 통제변인: 최초 음량, 마이크 거리', value: reportForm.variables, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { variables: ev.target.value })); }, className: 'w-full p-2 border rounded-lg bg-white text-2xs variable-box' })
+                  e('input', {
+                    type: 'text',
+                    placeholder: reportPlaceholders.variables,
+                    value: reportForm.variables,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { variables: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white text-2xs variable-box'
+                  })
                 ),
                 e('div', null,
                   e('label', { className: 'font-bold text-slate-700 block mb-1' }, '4. 측정 방법 및 실험 절차'),
-                  e('textarea', { rows: 3, placeholder: '스마트폰 측정 앱 활용 및 수집된 정량적 데이터(수치) 기록', value: reportForm.procedure, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { procedure: ev.target.value })); }, className: 'w-full p-2 border rounded-lg bg-white' })
+                  e('textarea', {
+                    rows: 3,
+                    placeholder: reportPlaceholders.procedure,
+                    value: reportForm.procedure,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { procedure: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
                 ),
                 e('div', null,
                   e('label', { className: 'font-bold text-slate-700 block mb-1' }, '5. 결론 및 음악적 시사점'),
-                  e('textarea', { rows: 2, placeholder: '가설 검증 결과 및 음악 감상·학교 환경에 미치는 시사점', value: reportForm.conclusion, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { conclusion: ev.target.value })); }, className: 'w-full p-2 border rounded-lg bg-white' })
+                  e('textarea', {
+                    rows: 2,
+                    placeholder: reportPlaceholders.conclusion,
+                    value: reportForm.conclusion,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { conclusion: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
                 ),
                 e('div', null,
                   e('label', { className: 'font-bold text-slate-700 block mb-1' }, '6. 한계와 후속 탐구 (필수 기재)'),
-                  e('textarea', { rows: 2, placeholder: '표본 수의 한계, 앱 측정 오차, 통제하지 못한 변인, 상관과 인과의 차이, 향후 심화 탐구 방향', value: reportForm.limitations, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { limitations: ev.target.value })); }, className: 'w-full p-2 border rounded-lg bg-white' })
+                  e('textarea', {
+                    rows: 2,
+                    placeholder: reportPlaceholders.limitations,
+                    value: reportForm.limitations,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { limitations: ev.target.value })); },
+                    className: 'w-full p-2 border rounded-lg bg-white'
+                  })
                 )
               ),
 
-              // [주제 2 전용 폼: 문화유산 상품 기획 + 유의할 점 추가]
+              // [주제 2 전용 폼: 문화유산 상품 기획 + 회색 반투명 플레이스홀더]
               reportForm.topicCategory === 'product' && e('div', { className: 'space-y-3 bg-emerald-50/40 p-4 rounded-2xl border border-emerald-200' },
                 e('div', { className: 'p-3 bg-white rounded-xl border border-emerald-200' },
                   e('label', { className: 'font-bold text-emerald-950 block mb-1' }, '문화유산명 및 기획 상품명'),
-                  e('input', { type: 'text', placeholder: '예: 사물놀이 스마트 합주 키트 / 강강술래 인터랙티브 체험 가이드', value: reportForm.brandName, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { brandName: ev.target.value })); }, className: 'w-full p-2 border border-emerald-300 rounded-lg bg-emerald-50/20 font-bold' })
+                  e('input', {
+                    type: 'text',
+                    placeholder: reportPlaceholders.brandName,
+                    value: reportForm.brandName,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { brandName: ev.target.value })); },
+                    className: 'w-full p-2 border border-emerald-300 rounded-lg bg-emerald-50/20 font-bold'
+                  })
                 ),
                 e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
                   e('div', null,
                     e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '1. 해당 음악의 특징'),
-                    e('textarea', { rows: 3, placeholder: '문화유산의 역사적 배경, 악기 구성, 장단의 변화와 호흡 등 고유한 음악적 특징', value: reportForm.productTrait, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productTrait: ev.target.value })); }, className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white' })
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productTrait,
+                      value: reportForm.productTrait,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productTrait: ev.target.value })); },
+                      className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white'
+                    })
                   ),
                   e('div', null,
                     e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '2. 구체적으로 (개발 방식 및 구성)'),
-                    e('textarea', { rows: 3, placeholder: '어떤 기술(앱, 게임, 음원 큐레이션, 미니 키트 등)로 구현하며 어떻게 체험하도록 할 것인가', value: reportForm.productHow, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productHow: ev.target.value })); }, className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white' })
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productHow,
+                      value: reportForm.productHow,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productHow: ev.target.value })); },
+                      className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white'
+                    })
                   )
                 ),
                 e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
                   e('div', null,
                     e('label', { className: 'font-bold text-emerald-900 block mb-1' }, '3. 얻을 수 있는 기대 효과'),
-                    e('textarea', { rows: 3, placeholder: '협동심, 리듬감, 전통에 대한 친숙도, 세대 간 소통 등 문화적·교육적 기대 효과', value: reportForm.productImpact, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productImpact: ev.target.value })); }, className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white' })
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productImpact,
+                      value: reportForm.productImpact,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productImpact: ev.target.value })); },
+                      className: 'w-full p-2 border border-emerald-200 rounded-lg bg-white'
+                    })
                   ),
                   e('div', null,
                     e('label', { className: 'font-bold text-amber-900 block mb-1' }, '4. 상품 개발 및 사용(판매·체험) 시 유의할 점'),
-                    e('textarea', { rows: 3, placeholder: '저작권 및 이용 허락 확인, 종교·문화적 맥락 존중, 안전 수칙, 실제 성과 검증 필요성 등', value: reportForm.productPrecaution, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productPrecaution: ev.target.value })); }, className: 'w-full p-2 border border-amber-300 rounded-lg bg-amber-50/30' })
+                    e('textarea', {
+                      rows: 3,
+                      placeholder: reportPlaceholders.productPrecaution,
+                      value: reportForm.productPrecaution,
+                      onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { productPrecaution: ev.target.value })); },
+                      className: 'w-full p-2 border border-amber-300 rounded-lg bg-amber-50/30'
+                    })
                   )
                 )
               ),
 
-              // [주제 3 전용 폼: 대중음악사 1, 2, 3 규격]
-              reportForm.topicCategory === 'pop_history' && e('div', { className: 'space-y-3 bg-teal-50/40 p-4 rounded-2xl border border-teal-200' },
-                e('div', null,
-                  e('label', { className: 'font-bold text-teal-900 block mb-1' }, '1. 우리나라 대중음악 100년사 정리 (1920s ~ 2020s 핵심 흐름 요약)'),
-                  e('textarea', { rows: 3, placeholder: '1920년대 윤심덕 사의 찬미부터 1990년대 서태지와 아이들, 2020년대 숏폼 K-POP까지의 핵심 사건 및 흐름', value: reportForm.popRecords, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { popRecords: ev.target.value })); }, className: 'w-full p-2 border border-teal-200 rounded-lg bg-white' })
+              // [주제 3 신규 정비 폼: 1920s ~ 2020s 11개 구간 완벽 분리]
+              reportForm.topicCategory === 'pop_history' && e('div', { className: 'space-y-6 bg-teal-50/40 p-4 rounded-2xl border border-teal-200' },
+                // 1. 우리나라 대중음악 100년사 정리 (1920s ~ 2020s)
+                e('div', { className: 'space-y-3' },
+                  e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
+                    e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '1'),
+                    e('h4', { className: 'text-sm font-extrabold text-teal-950' }, '우리나라 대중음악 100년사 정리 (1920년대 ~ 2020년대)'),
+                    e('span', { className: 'text-2xs text-teal-700 font-semibold ml-auto' }, '10년 단위 11개 구간')
+                  ),
+                  e('div', { className: 'space-y-2' },
+                    POP_ERAS.map(function(era, idx) {
+                      const item = (reportForm.popKorean100 && reportForm.popKorean100[idx]) || { song: '', history: '' };
+                      return e('div', { key: 'kr_' + era, className: 'p-2.5 bg-white rounded-xl border border-teal-100 flex flex-col sm:flex-row gap-2 items-start sm:items-center' },
+                        e('span', { className: 'text-xs font-black text-teal-800 bg-teal-50 px-2 py-1 rounded w-20 shrink-0 text-center' }, era),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 대표곡(가수) 입력 (예시 그대로 복사 금지)',
+                          value: item.song || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popKorean100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { song: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popKorean100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        }),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 대표적 역사적 사건이나 당시 시대상 기록',
+                          value: item.history || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popKorean100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { history: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popKorean100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        })
+                      );
+                    })
+                  )
                 ),
-                e('div', null,
-                  e('label', { className: 'font-bold text-teal-900 block mb-1' }, '2. 동시대 글로벌 대중음악 동향 대조 (서양 팝과 한국 가요의 수용과 변용)'),
-                  e('textarea', { rows: 3, placeholder: '재즈, 스윙, 로큰롤, 디스코, 힙합 등 동시대 서양 대중음악 흐름과 한국 대중음악의 독창적 변용 대조', value: reportForm.procedure, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { procedure: ev.target.value })); }, className: 'w-full p-2 border border-teal-200 rounded-lg bg-white' })
+
+                // 2. 글로벌 대중음악 100년사 정리 (1920s ~ 2020s)
+                e('div', { className: 'space-y-3' },
+                  e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
+                    e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '2'),
+                    e('h4', { className: 'text-sm font-extrabold text-teal-950' }, '글로벌 대중음악 100년사 정리 (1920년대 ~ 2020년대)'),
+                    e('span', { className: 'text-2xs text-teal-700 font-semibold ml-auto' }, '10년 단위 11개 구간')
+                  ),
+                  e('div', { className: 'space-y-2' },
+                    POP_ERAS.map(function(era, idx) {
+                      const item = (reportForm.popGlobal100 && reportForm.popGlobal100[idx]) || { song: '', history: '' };
+                      return e('div', { key: 'gl_' + era, className: 'p-2.5 bg-white rounded-xl border border-teal-100 flex flex-col sm:flex-row gap-2 items-start sm:items-center' },
+                        e('span', { className: 'text-xs font-black text-teal-800 bg-teal-50 px-2 py-1 rounded w-20 shrink-0 text-center' }, era),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 글로벌 대표곡(가수) 입력 (예시 그대로 복사 금지)',
+                          value: item.song || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popGlobal100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { song: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popGlobal100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        }),
+                        e('input', {
+                          type: 'text',
+                          placeholder: era + ' 글로벌 대표 역사적 사건이나 당시 시대상 기록',
+                          value: item.history || '',
+                          onChange: function(ev) {
+                            const updated = (reportForm.popGlobal100 || []).slice();
+                            updated[idx] = Object.assign({}, updated[idx], { history: ev.target.value });
+                            setReportForm(Object.assign({}, reportForm, { popGlobal100: updated }));
+                          },
+                          className: 'w-full sm:w-1/2 p-1.5 border border-slate-200 rounded text-xs'
+                        })
+                      );
+                    })
+                  )
                 ),
-                e('div', null,
-                  e('label', { className: 'font-bold text-teal-900 block mb-1' }, '3. 2030년 이후 미래 음악 예측 (1, 2, 3 형식의 3문장 작성)'),
-                  [0, 1, 2].map(function(idx) {
-                    return e('input', {
-                      key: idx,
-                      type: 'text',
-                      placeholder: '미래 예측 문장 ' + (idx + 1) + ' (' + (idx === 0 ? '창작 주체 관점' : idx === 1 ? '음악 형식 관점' : '소비 가치 관점') + ')',
-                      value: reportForm.popFuture[idx] || '',
-                      onChange: function(ev) {
-                        const up = reportForm.popFuture.slice();
-                        up[idx] = ev.target.value;
-                        setReportForm(Object.assign({}, reportForm, { popFuture: up }));
-                      },
-                      className: 'w-full p-1.5 border border-teal-200 rounded-lg bg-white mb-1.5 text-xs'
-                    });
-                  })
+
+                // 3. 2030년 이후 미래 음악 예측 (3대 측면)
+                e('div', { className: 'space-y-3' },
+                  e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
+                    e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '3'),
+                    e('h4', { className: 'text-sm font-extrabold text-teal-950' }, '2030년 이후 미래 음악 예측 (3대 측면)'),
+                    e('span', { className: 'text-2xs text-teal-700 font-semibold ml-auto' }, '창작·형식·가치')
+                  ),
+                  e('div', { className: 'space-y-3' },
+                    e('div', { className: 'p-3 bg-white rounded-xl border border-teal-100' },
+                      e('label', { className: 'font-bold text-teal-950 block mb-1' }, '1. 창작 주체 측면 예측'),
+                      e('textarea', {
+                        rows: 2,
+                        placeholder: '인공지능(AI), 버추얼 아티스트, 인간 음악가 간의 역할 변화 및 새로운 창작 주체에 대한 예측을 서술하세요.',
+                        value: (reportForm.popFutureThree && reportForm.popFutureThree.creator) || '',
+                        onChange: function(ev) {
+                          setReportForm(Object.assign({}, reportForm, {
+                            popFutureThree: Object.assign({}, reportForm.popFutureThree, { creator: ev.target.value })
+                          }));
+                        },
+                        className: 'w-full p-2 border border-slate-200 rounded-lg text-xs'
+                      })
+                    ),
+                    e('div', { className: 'p-3 bg-white rounded-xl border border-teal-100' },
+                      e('label', { className: 'font-bold text-teal-950 block mb-1' }, '2. 음악 형식 측면 예측'),
+                      e('textarea', {
+                        rows: 2,
+                        placeholder: '곡의 길이(초단축 음원 등), 절-후렴 구조의 해체, 공간 음향, 인터랙티브 가변형 음악 등 형식적 변화를 예측하세요.',
+                        value: (reportForm.popFutureThree && reportForm.popFutureThree.form) || '',
+                        onChange: function(ev) {
+                          setReportForm(Object.assign({}, reportForm, {
+                            popFutureThree: Object.assign({}, reportForm.popFutureThree, { form: ev.target.value })
+                          }));
+                        },
+                        className: 'w-full p-2 border border-slate-200 rounded-lg text-xs'
+                      })
+                    ),
+                    e('div', { className: 'p-3 bg-white rounded-xl border border-teal-100' },
+                      e('label', { className: 'font-bold text-teal-950 block mb-1' }, '3. 음악의 가치 측면 예측'),
+                      e('textarea', {
+                        rows: 2,
+                        placeholder: '생성형 사운드 범람 속에서 대중이 추구할 진정한 음악적 가치(현장성, 어쿠스틱 라이브, 인간적 유대감 등)를 예측하세요.',
+                        value: (reportForm.popFutureThree && reportForm.popFutureThree.value) || '',
+                        onChange: function(ev) {
+                          setReportForm(Object.assign({}, reportForm, {
+                            popFutureThree: Object.assign({}, reportForm.popFutureThree, { value: ev.target.value })
+                          }));
+                        },
+                        className: 'w-full p-2 border border-slate-200 rounded-lg text-xs'
+                      })
+                    )
+                  )
                 )
               ),
 
-              // [주제 4 전용 폼: 요청하신 5단계 교차 실증 프로세스 일치화]
+              // [주제 4 전용 폼: 회색 반투명 플레이스홀더 적용]
               reportForm.topicCategory === 'east_west' && e('div', { className: 'space-y-3 bg-amber-50/40 p-4 rounded-2xl border border-amber-200' },
                 e('div', null,
                   e('label', { className: 'font-bold text-amber-950 block mb-1' }, '1. 이론 학습 (서양 이론 vs 국악 이론 요약 및 핵심 개념)'),
                   e('textarea', {
                     rows: 3,
-                    placeholder: '서양 이론 요약 및 국악 이론 요약 (두 체계가 소리를 다루는 기본 원리와 개념 차이 서술)',
+                    placeholder: reportPlaceholders.ewStep1Theory,
                     value: reportForm.ewStep1Theory,
                     onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep1Theory: ev.target.value })); },
                     className: 'w-full p-2 border border-amber-200 rounded-lg bg-white leading-relaxed'
@@ -1425,7 +1688,7 @@
                   e('label', { className: 'font-bold text-amber-950 block mb-1' }, '2. 탐구 영역 선택 및 가설 세우기'),
                   e('textarea', {
                     rows: 2,
-                    placeholder: '선택 영역(조율, 음정·음계, 기보, 악기 분류, 연주 방식·공간) 및 두 이론의 차이를 검증할 수 있는 구체적 가설',
+                    placeholder: reportPlaceholders.ewStep2Hypothesis,
                     value: reportForm.ewStep2Hypothesis,
                     onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep2Hypothesis: ev.target.value })); },
                     className: 'w-full p-2 border border-amber-200 rounded-lg bg-white'
@@ -1435,7 +1698,7 @@
                   e('label', { className: 'font-bold text-amber-900 block' }, '3. 변인 통제 설정 (독립 / 종속 / 통제변인)'),
                   e('input', {
                     type: 'text',
-                    placeholder: '예: 독립변인: 조율 방식(피타고라스 대 삼분손익법) / 종속변인: 진동수 비, 어긋남(센트) / 통제변인: 같은 기준음, 옥타브 환원 규칙',
+                    placeholder: reportPlaceholders.ewStep3Variables,
                     value: reportForm.ewStep3Variables,
                     onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep3Variables: ev.target.value })); },
                     className: 'w-full p-2 border rounded-lg bg-white text-2xs variable-box'
@@ -1445,7 +1708,7 @@
                   e('label', { className: 'font-bold text-amber-950 block mb-1' }, '4. 실증 활동 (측정·계산·설문 방법 및 결과 데이터)'),
                   e('textarea', {
                     rows: 3,
-                    placeholder: '수학적 계산표, 오디오 프로그램 측정 시간, 청취 설문 점수 등 수집된 실제 데이터 결과 기록',
+                    placeholder: reportPlaceholders.ewStep4Empirical,
                     value: reportForm.ewStep4Empirical,
                     onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep4Empirical: ev.target.value })); },
                     className: 'w-full p-2 border border-amber-200 rounded-lg bg-white leading-relaxed'
@@ -1455,7 +1718,7 @@
                   e('label', { className: 'font-bold text-amber-950 block mb-1' }, '5. 두 체계의 같은 점과 다른 점 비교 및 한계점 서술'),
                   e('textarea', {
                     rows: 3,
-                    placeholder: '‘어느 쪽이 더 낫다’가 아닌, 각 체계가 무엇을 기준으로 소리를 다루는지를 자료로 비교하고 연구의 한계(표본 수, 앱 오차 등)를 서술',
+                    placeholder: reportPlaceholders.ewStep5Comparison,
                     value: reportForm.ewStep5Comparison,
                     onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { ewStep5Comparison: ev.target.value })); },
                     className: 'w-full p-2 border border-amber-200 rounded-lg bg-white leading-relaxed'
@@ -1474,7 +1737,13 @@
                 ),
                 e('div', null,
                   e('label', { className: 'block text-2xs font-bold text-purple-900 mb-1' }, 'AI에게 입력한 질문(프롬프트)'),
-                  e('input', { type: 'text', placeholder: 'AI에게 입력한 질문을 구체적으로 적으세요', value: reportForm.aiLog.prompt, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { aiLog: Object.assign({}, reportForm.aiLog, { prompt: ev.target.value }) })); }, className: 'w-full p-2 border border-purple-200 rounded-lg bg-white text-xs' })
+                  e('input', {
+                    type: 'text',
+                    placeholder: 'AI에게 입력한 질문을 구체적으로 적으세요',
+                    value: reportForm.aiLog.prompt,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { aiLog: Object.assign({}, reportForm.aiLog, { prompt: ev.target.value }) })); },
+                    className: 'w-full p-2 border border-purple-200 rounded-lg bg-white text-xs'
+                  })
                 ),
 
                 // 사진 캡처 업로드 기능
@@ -1507,7 +1776,13 @@
 
                 e('div', null,
                   e('label', { className: 'block text-2xs font-bold text-purple-900 mb-1' }, '학생의 비판적 검증 및 교정 내용 (AI 답변의 오류나 한계점을 스스로 보완한 점)'),
-                  e('textarea', { rows: 3, placeholder: 'AI의 답변을 무비판적으로 복사하지 않고, 국가유산청/교과서 등을 통해 확인한 오류나 보완한 내용을 본인의 문장으로 작성하세요.', value: reportForm.aiLog.criticalReview, onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { aiLog: Object.assign({}, reportForm.aiLog, { criticalReview: ev.target.value }) })); }, className: 'w-full p-2 border border-purple-200 rounded-lg bg-white text-xs leading-relaxed' })
+                  e('textarea', {
+                    rows: 3,
+                    placeholder: 'AI의 답변을 무비판적으로 복사하지 않고, 국가유산청/교과서 등을 통해 확인한 오류나 보완한 내용을 본인의 문장으로 작성하세요.',
+                    value: reportForm.aiLog.criticalReview,
+                    onChange: function(ev) { setReportForm(Object.assign({}, reportForm, { aiLog: Object.assign({}, reportForm.aiLog, { criticalReview: ev.target.value }) })); },
+                    className: 'w-full p-2 border border-purple-200 rounded-lg bg-white text-xs leading-relaxed'
+                  })
                 )
               )
             ),
@@ -1591,25 +1866,6 @@
                 )
               ),
 
-              editingItemCategory === 'pop_history' && e('div', { className: 'space-y-3' },
-                e('div', null,
-                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '통합 과제 제목'),
-                  e('input', { type: 'text', value: editingItemForm.title || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { title: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs font-bold' })
-                ),
-                e('div', null,
-                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '1. 우리나라 대중음악 100년사 정리'),
-                  e('textarea', { rows: 3, value: editingItemForm.koreanHistory || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { koreanHistory: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
-                ),
-                e('div', null,
-                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '2. 동시대 글로벌 대중음악 동향 대조'),
-                  e('textarea', { rows: 3, value: editingItemForm.globalComparison || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { globalComparison: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
-                ),
-                e('div', null,
-                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '3. 2030년 이후 미래 음악 예측'),
-                  e('textarea', { rows: 3, value: editingItemForm.futurePrediction || '', onChange: function(ev) { setEditingItemForm(Object.assign({}, editingItemForm, { futurePrediction: ev.target.value })); }, className: 'w-full p-2 border rounded-xl text-xs' })
-                )
-              ),
-
               editingItemCategory === 'east_west' && e('div', { className: 'space-y-3' },
                 e('div', null,
                   e('label', { className: 'block font-bold text-slate-700 mb-1' }, '메인 탐구 과제 (제목)'),
@@ -1667,7 +1923,6 @@
             ),
 
             e('div', { className: 'p-6 overflow-y-auto space-y-6 flex-1 text-xs' },
-              // 학생 제출 보고서 확인 카드
               e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
                 e('div', { className: 'p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2' },
                   e('div', { className: 'flex items-center justify-between' },
@@ -1680,7 +1935,7 @@
                     (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.topicTitle) || '미선택'
                   ),
                   e('p', { className: 'text-slate-600 line-clamp-4 leading-relaxed' },
-                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && (allSubmissions[gradingStudentId].reports.report1.procedure || allSubmissions[gradingStudentId].reports.report1.productHow || allSubmissions[gradingStudentId].reports.report1.ewStep4Empirical || allSubmissions[gradingStudentId].reports.report1.popRecords)) || '작성된 내용이 없습니다.'
+                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && (allSubmissions[gradingStudentId].reports.report1.procedure || allSubmissions[gradingStudentId].reports.report1.productHow || allSubmissions[gradingStudentId].reports.report1.ewStep4Empirical || ((allSubmissions[gradingStudentId].reports.report1.popKorean100 && allSubmissions[gradingStudentId].reports.report1.popKorean100[0] && allSubmissions[gradingStudentId].reports.report1.popKorean100[0].song) || ''))) || '작성된 내용이 없습니다.'
                   ),
                   e('div', { className: 'text-2xs text-purple-800 bg-purple-50 p-2.5 rounded-lg space-y-1' },
                     e('p', null, e('strong', null, 'AI 질문: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.aiLog && allSubmissions[gradingStudentId].reports.report1.aiLog.prompt) || '없음'),
@@ -1703,7 +1958,7 @@
                     (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.topicTitle) || '미선택'
                   ),
                   e('p', { className: 'text-slate-600 line-clamp-4 leading-relaxed' },
-                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && (allSubmissions[gradingStudentId].reports.report2.procedure || allSubmissions[gradingStudentId].reports.report2.productHow || allSubmissions[gradingStudentId].reports.report2.ewStep4Empirical || allSubmissions[gradingStudentId].reports.report2.popRecords)) || '작성된 내용이 없습니다.'
+                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && (allSubmissions[gradingStudentId].reports.report2.procedure || allSubmissions[gradingStudentId].reports.report2.productHow || allSubmissions[gradingStudentId].reports.report2.ewStep4Empirical || ((allSubmissions[gradingStudentId].reports.report2.popKorean100 && allSubmissions[gradingStudentId].reports.report2.popKorean100[0] && allSubmissions[gradingStudentId].reports.report2.popKorean100[0].song) || ''))) || '작성된 내용이 없습니다.'
                   ),
                   e('div', { className: 'text-2xs text-purple-800 bg-purple-50 p-2.5 rounded-lg space-y-1' },
                     e('p', null, e('strong', null, 'AI 질문: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.aiLog && allSubmissions[gradingStudentId].reports.report2.aiLog.prompt) || '없음'),
@@ -1810,6 +2065,34 @@
             e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
               e('button', { onClick: function() { setGradingStudentId(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, '취소'),
               e('button', { onClick: saveTeacherGrading, className: 'px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' }, '채점 완료 및 점수 저장')
+            )
+          )
+        ),
+
+        // [기기 간 데이터 백업/불러오기 모달]
+        showSyncModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm' },
+          e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full space-y-4 shadow-2xl' },
+            e('div', { className: 'flex items-center justify-between pb-2 border-b' },
+              e('div', { className: 'flex items-center gap-2' },
+                e('i', { className: 'fa-solid fa-cloud-arrow-down text-teal-600' }),
+                e('h3', { className: 'text-sm font-black text-slate-900' }, '다른 기기에서 데이터 불러오기')
+              ),
+              e('button', { onClick: function() { setShowSyncModal(false); }, className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
+              )
+            ),
+            e('p', { className: 'text-xs text-slate-600 leading-relaxed' },
+              '학교 PC나 다른 스마트폰에서 복사해 둔 [백업 코드]를 여기에 붙여넣으면, 지금까지 작성한 모든 보고서와 계정 정보가 이 기기로 즉시 동기화됩니다.'
+            ),
+            e('textarea', {
+              rows: 5,
+              placeholder: '복사한 백업 코드를 여기에 붙여넣으세요...',
+              value: syncCodeInput,
+              onChange: function(ev) { setSyncCodeInput(ev.target.value); },
+              className: 'w-full p-3 border rounded-xl font-mono text-2xs bg-slate-50'
+            }),
+            e('button', { onClick: importSyncData, className: 'w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow' },
+              '이 기기로 데이터 동기화 완료하기'
             )
           )
         ),
