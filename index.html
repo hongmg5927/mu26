@@ -547,55 +547,7 @@
         setActiveItemEditModal(true);
       };
 
-      // 기기 간 데이터 백업 코드 생성 및 복사
-      const exportSyncData = function() {
-        if (!currentUser) return;
-        const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
-        const sData = allSubmissions[userKey];
-        if (!sData) { showToast('백업할 작성 내용이 없습니다.'); return; }
-        const exportObj = {
-          user: currentUser,
-          submission: sData,
-          exportedAt: new Date().toISOString()
-        };
-        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(exportObj))));
-        navigator.clipboard.writeText(encoded).then(function() {
-          showToast('내 탐구 데이터 백업 코드가 클립보드에 복사되었습니다! 다른 기기에서 불러오세요. 📋');
-        }).catch(function() {
-          prompt('아래 백업 코드를 복사하세요:', encoded);
-        });
-      };
-
-      // 다른 기기에서 백업 코드로 불러와 동기화
-      const importSyncData = function() {
-        if (!syncCodeInput.trim()) { showToast('백업 코드를 입력해 주세요.'); return; }
-        try {
-          const decoded = JSON.parse(decodeURIComponent(escape(atob(syncCodeInput.trim()))));
-          if (!decoded.submission || !decoded.user) {
-            showToast('올바른 백업 코드 형식이 아닙니다.');
-            return;
-          }
-          const userKey = decoded.user.id;
-          const up = Object.assign({}, allSubmissions, { [userKey]: decoded.submission });
-          setAllSubmissions(up);
-          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
-
-          // 계정도 함께 동기화
-          const accs = getStudentAccounts();
-          if (decoded.user.role === 'student' && !accs[userKey]) {
-            accs[userKey] = { id: userKey, name: decoded.user.name, pw: '0000' };
-            localStorage.setItem('music_student_accounts', JSON.stringify(accs));
-          }
-
-          setShowSyncModal(false);
-          setSyncCodeInput('');
-          showToast(decoded.user.name + ' 학생의 탐구 데이터가 이 기기로 완벽히 동기화되었습니다! 🔄');
-        } catch(err) {
-          showToast('코드 해석에 실패했습니다. 코드를 다시 확인해 주세요.');
-        }
-      };
-
-      // [핵심 변경] 추천 카드를 클릭했을 때 기존 내용이 회색 반투명 플레이스홀더로 뜨고, 글씨를 쓰면 새로워지도록 설정
+       // [핵심 변경] 추천 카드를 클릭했을 때 기존 내용이 회색 반투명 플레이스홀더로 뜨고, 글씨를 쓰면 새로워지도록 설정
       const openReportModal = function(categoryType, item, defaultSlot) {
         if (!currentUser) {
           showToast('로그인 후 점검 및 작성을 진행할 수 있습니다.');
