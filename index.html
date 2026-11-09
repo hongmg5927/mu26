@@ -357,11 +357,11 @@
       }
       if (!rep) return { kind: 'none', label: '미선택' };
       if (g && g.reportVersion === rep.updatedAt) {
-        return { kind: 'graded', label: g.round + '차 채점 완료 (' + g.score + '점)', score: g.score, round: g.round };
+        return { kind: 'graded', label: g.round + '차 채점 완료 (' + g.score + '점)', score: g.score, round: g.round, grade: g };
       }
-      if (g && rep.isSubmitted) return { kind: 'resubmitted', label: '재제출 · 채점 대기 (이전 ' + g.score + '점)', score: g.score };
+      if (g && rep.isSubmitted) return { kind: 'resubmitted', label: '재제출 · 채점 대기 (이전 ' + g.score + '점)', score: g.score, grade: g };
       if (rep.isSubmitted) return { kind: 'submitted', label: '제출 완료' };
-      return { kind: 'draft', label: g ? '수정 중 (이전 ' + g.score + '점)' : '작성 중', score: g ? g.score : undefined };
+      return { kind: 'draft', label: g ? '수정 중 (이전 ' + g.score + '점)' : '작성 중', score: g ? g.score : undefined, grade: g || null };
     }
 
     const STATUS_STYLE = {
@@ -414,6 +414,53 @@
       [10, '10점 - 자료 분석은 있으나 AI 검증 내용이 미흡함'],
       [5, '5점 - 단순 복사 또는 자료 분석에 오류가 많음']
     ];
+
+    function rubricText(options, v) {
+      const o = options.filter(function(x) { return x[0] === Number(v); })[0];
+      return o ? (o[1].split(' - ')[1] || o[1]) : '';
+    }
+
+    // [학생 화면] 과제별 채점 결과: 항목별 점수 + 기준 설명 + 선생님 코멘트
+    function GradeResultCard(props) {
+      const g = props.grade;
+      const n = props.slot === 'report1' ? '1' : '2';
+      const gr = (props.sub && props.sub.grading) || {};
+      const content = g.content !== undefined ? g.content : gr['r' + n + '_content'];
+      const analysis = g.analysis !== undefined ? g.analysis : gr['r' + n + '_analysis'];
+      const comment = g.comment || '';
+      const prev = props.previous;
+      const tone = prev
+        ? { box: 'bg-amber-50 border-amber-200', title: 'text-amber-800', score: 'text-amber-900' }
+        : { box: 'bg-emerald-50 border-emerald-200', title: 'text-emerald-700', score: 'text-emerald-900' };
+      const row = function(label, v, options) {
+        return e('div', { className: 'flex items-start justify-between gap-3 p-2.5 rounded-lg bg-white border border-slate-100' },
+          e('div', null,
+            e('p', { className: 'text-2xs font-bold text-slate-700' }, label),
+            v !== undefined && e('p', { className: 'text-2xs text-slate-500 mt-0.5' }, rubricText(options, v))
+          ),
+          e('span', { className: 'font-mono font-black text-sm shrink-0 ' + tone.score }, (v !== undefined ? v : '-') + ' / 15')
+        );
+      };
+      return e('div', { className: 'mb-4 p-4 rounded-2xl border space-y-2.5 ' + tone.box },
+        e('div', { className: 'flex items-start justify-between gap-2' },
+          e('div', null,
+            e('p', { className: 'text-xs font-extrabold ' + tone.title }, (prev ? '이전 채점 결과 (' : '채점 결과 (') + g.round + '차)'),
+            prev && e('p', { className: 'text-2xs text-amber-700 mt-0.5' }, '보완해서 다시 제출하면 선생님이 다시 채점합니다.')
+          ),
+          e('p', { className: 'text-xl font-black ' + tone.score }, g.score + '점',
+            e('span', { className: 'text-2xs font-bold ml-1 opacity-70' }, '/ 30점'))
+        ),
+        row('탐구 내용 일치성 및 충실도', content, CONTENT_OPTIONS),
+        row('자료 분석 및 AI 비판 검증', analysis, ANALYSIS_OPTIONS),
+        isFilled(comment) && e('div', { className: 'p-3 rounded-lg bg-white border border-slate-200' },
+          e('p', { className: 'text-2xs font-bold text-slate-700 mb-1 flex items-center gap-1' },
+            e('i', { className: 'fa-solid fa-comment-dots text-indigo-500' }),
+            e('span', null, '선생님 코멘트')
+          ),
+          e('p', { className: 'text-xs text-slate-700 whitespace-pre-wrap leading-relaxed' }, comment)
+        )
+      );
+    }
 
     // =========================================================
     // [보고서 보기] 학생이 작성한 보고서를 작성 화면 구성 그대로 보여 주기
@@ -651,6 +698,8 @@
         r1_analysis: 15,
         r2_content: 15,
         r2_analysis: 15,
+        r1_comment: '',
+        r2_comment: '',
         teacherFeedback: ''
       });
 
@@ -1044,6 +1093,8 @@
           r1_analysis: g.r1_analysis || 15,
           r2_content: g.r2_content || 15,
           r2_analysis: g.r2_analysis || 15,
+          r1_comment: (g.r1 && g.r1.comment) || '',
+          r2_comment: (g.r2 && g.r2.comment) || '',
           teacherFeedback: g.teacherFeedback || ''
         });
       };
@@ -1079,8 +1130,12 @@
           const prev = prevGrading[key] || (rep && legacy !== undefined ? { score: legacy, round: 1, reportVersion: rep.updatedAt, gradedAt: prevGrading.gradedAt } : null);
           if (slots.indexOf(slot) === -1 || !rep) return prev;
           const sameVersion = prev && prev.reportVersion === rep.updatedAt;
+          const n = slot === 'report1' ? '1' : '2';
           return {
             score: score,
+            content: Number(gradingForm['r' + n + '_content']),
+            analysis: Number(gradingForm['r' + n + '_analysis']),
+            comment: (gradingForm['r' + n + '_comment'] || '').trim(),
             round: prev ? (sameVersion ? prev.round : prev.round + 1) : 1,
             reportVersion: rep.updatedAt,
             gradedAt: nowStr
@@ -1150,6 +1205,24 @@
           e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
             sel(ck, '탐구 내용 일치성 및 충실도 (15점)', CONTENT_OPTIONS),
             sel(ak, '자료 분석 및 AI 비판 검증 (15점)', ANALYSIS_OPTIONS)
+          ),
+          e('div', null,
+            e('label', { className: 'block text-slate-700 font-bold mb-1' },
+              e('i', { className: 'fa-solid fa-comment-dots text-indigo-500 mr-1' }),
+              '학생에게 보여 줄 코멘트 (과제 ' + n + ')'
+            ),
+            e('textarea', {
+              rows: 2,
+              value: gradingForm['r' + n + '_comment'] || '',
+              onChange: function(ev) {
+                const u = {};
+                u['r' + n + '_comment'] = ev.target.value;
+                setGradingForm(Object.assign({}, gradingForm, u));
+              },
+              placeholder: '점수의 이유와 보완할 점을 한두 문장으로 적어 주세요. 학생의 [내 보고서] 화면에 그대로 보입니다.',
+              className: 'w-full p-2 border rounded-lg bg-white text-xs leading-relaxed'
+            }),
+            e('p', { className: 'text-2xs text-slate-400 mt-1' }, '※ 세특 메모와 달리 이 코멘트는 학생에게 공개됩니다.')
           )
         );
       };
@@ -1746,23 +1819,22 @@
                       e(StatusBadge, { status: getSlotStatus(allSubmissions[currentUser.id], slot) })
                     ),
                     (function() {
-                      const st = getSlotStatus(allSubmissions[currentUser.id], slot);
+                      const mine = allSubmissions[currentUser.id];
+                      const st = getSlotStatus(mine, slot);
                       if (st.kind === 'graded') {
-                        return e('div', { className: 'mb-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between' },
-                          e('div', null,
-                            e('p', { className: 'text-2xs font-bold text-emerald-700' }, st.round + '차 채점 결과'),
-                            e('p', { className: 'text-2xl font-black text-emerald-900' }, st.score + '점')
-                          ),
-                          e('span', { className: 'text-2xs text-emerald-700' }, '30점 만점')
-                        );
+                        return e(GradeResultCard, { grade: st.grade, sub: mine, slot: slot });
                       }
+                      const parts = [];
                       if (st.kind === 'submitted' || st.kind === 'resubmitted') {
-                        return e('div', { className: 'mb-4 p-3 rounded-2xl bg-blue-50 border border-blue-200 text-2xs text-blue-800 flex items-center gap-1.5' },
+                        parts.push(e('div', { key: 'wait', className: 'mb-3 p-3 rounded-2xl bg-blue-50 border border-blue-200 text-2xs text-blue-800 flex items-center gap-1.5' },
                           e('i', { className: 'fa-solid fa-hourglass-half' }),
                           e('span', null, '선생님의 채점을 기다리고 있습니다. 채점이 끝나면 이 화면에 바로 표시됩니다.')
-                        );
+                        ));
                       }
-                      return null;
+                      if ((st.kind === 'resubmitted' || st.kind === 'draft') && st.grade) {
+                        parts.push(e(GradeResultCard, { key: 'prev', grade: st.grade, sub: mine, slot: slot, previous: true }));
+                      }
+                      return parts.length ? e('div', null, parts) : null;
                     })(),
                     rep ? e('div', { className: 'space-y-2 text-xs' },
                       e('p', { className: 'font-bold text-slate-900 text-sm' }, '주제: ' + rep.topicTitle),
@@ -2565,7 +2637,7 @@
                 ),
 
                 e('div', null,
-                  e('label', { className: 'block font-bold text-slate-800 mb-1' }, '학교생활기록부 세부능력 및 특기사항(세특) 메모'),
+                  e('label', { className: 'block font-bold text-slate-800 mb-1' }, '학교생활기록부 세부능력 및 특기사항(세특) 메모 (교사만 보임)'),
                   e('textarea', {
                     rows: 3,
                     value: gradingForm.teacherFeedback,
