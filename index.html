@@ -34,7 +34,7 @@
 
   <script>
     const e = React.createElement;
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
 
     // --- Supabase 클라우드 DB 클라이언트 초기화 ---
     const SUPABASE_URL = 'https://inppmcoscwftseeaxvav.supabase.co';
@@ -343,6 +343,50 @@
       }
     ];
 
+    // =========================================================
+    // [채점 상태] 과제 슬롯별 상태 계산 및 배지
+    // =========================================================
+    function getSlotStatus(sub, slot) {
+      const rep = sub && sub.reports && sub.reports[slot];
+      const key = slot === 'report1' ? 'r1' : 'r2';
+      const legacyScore = sub && sub.grading ? sub.grading[slot === 'report1' ? 'score1' : 'score2'] : undefined;
+      let g = sub && sub.grading && sub.grading[key];
+      // 예전 방식으로 채점된 기록(점수만 있는 경우)도 채점 완료로 인정
+      if (!g && rep && legacyScore !== undefined) {
+        g = { score: legacyScore, round: 1, reportVersion: rep.updatedAt };
+      }
+      if (!rep) return { kind: 'none', label: '미선택' };
+      if (g && g.reportVersion === rep.updatedAt) {
+        return { kind: 'graded', label: g.round + '차 채점 완료 (' + g.score + '점)', score: g.score, round: g.round };
+      }
+      if (g && rep.isSubmitted) return { kind: 'resubmitted', label: '재제출 · 채점 대기 (이전 ' + g.score + '점)', score: g.score };
+      if (rep.isSubmitted) return { kind: 'submitted', label: '제출 완료' };
+      return { kind: 'draft', label: g ? '수정 중 (이전 ' + g.score + '점)' : '작성 중', score: g ? g.score : undefined };
+    }
+
+    const STATUS_STYLE = {
+      none: 'bg-slate-100 text-slate-400',
+      draft: 'bg-slate-100 text-slate-600',
+      submitted: 'bg-blue-100 text-blue-700',
+      resubmitted: 'bg-amber-100 text-amber-800',
+      graded: 'bg-emerald-100 text-emerald-800'
+    };
+    const STATUS_ICON = {
+      none: 'fa-minus',
+      draft: 'fa-pen',
+      submitted: 'fa-paper-plane',
+      resubmitted: 'fa-rotate',
+      graded: 'fa-circle-check'
+    };
+
+    function StatusBadge(props) {
+      const st = props.status;
+      return e('span', { className: 'inline-flex items-center gap-1 text-2xs font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap ' + STATUS_STYLE[st.kind] },
+        e('i', { className: 'fa-solid ' + STATUS_ICON[st.kind] }),
+        e('span', null, st.label)
+      );
+    }
+
     function App() {
       const [mainTab, setMainTab] = useState('inquiry');
       const [currentUser, setCurrentUser] = useState(function() {
@@ -488,8 +532,39 @@
       useEffect(function() {
         fetchSubmissionsFromCloud();
         const interval = setInterval(fetchSubmissionsFromCloud, 20000);
-        return function() { clearInterval(interval); };
+
+        // [실시간] Supabase Realtime: DB가 바뀌는 즉시 다시 불러오기 (20초 자동 갱신은 예비용으로 유지)
+        let channel = null;
+        if (supabaseClient) {
+          try {
+            channel = supabaseClient
+              .channel('submissions-live')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, function() {
+                fetchSubmissionsFromCloud();
+              })
+              .subscribe();
+          } catch (err) {
+            console.error('Realtime Subscribe Error:', err);
+          }
+        }
+
+        return function() {
+          clearInterval(interval);
+          if (channel && supabaseClient) supabaseClient.removeChannel(channel);
+        };
       }, []);
+
+      // [실시간] 학생 화면: 채점 결과가 새로 들어오면 알림 표시
+      const lastGradedRef = useRef(null);
+      useEffect(function() {
+        if (!currentUser || currentUser.role !== 'student') { lastGradedRef.current = null; return; }
+        const mine = allSubmissions[currentUser.id];
+        const stamp = (mine && mine.grading && mine.grading.gradedAt) || '';
+        if (lastGradedRef.current !== null && stamp && stamp !== lastGradedRef.current) {
+          showToast('선생님이 보고서를 채점했습니다. [내 보고서] 탭에서 확인하세요. 📝');
+        }
+        lastGradedRef.current = stamp;
+      }, [allSubmissions, currentUser]);
 
       const updateCurrentUserSession = function(user) {
         setCurrentUser(user);
@@ -717,7 +792,7 @@
         reader.readAsDataURL(file);
       };
 
-      const saveReport = function(isSubmit) {
+      const saveReport = async function(isSubmit) {
         const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
         const userName = currentUser.role === 'teacher' ? '교사(점검용)' : currentUser.name;
         const sData = allSubmissions[userKey] || { studentId: userKey, studentName: userName, reports: {} };
@@ -726,6 +801,19 @@
           [reportForm.slot]: Object.assign({}, reportForm, { isSubmitted: isSubmit, updatedAt: now })
         });
         const fullData = Object.assign({}, sData, { reports: upReports });
+
+        // 학생이 저장할 때 클라우드의 최신 채점 결과를 덮어쓰지 않도록 먼저 가져와 유지
+        if (supabaseClient && currentUser.role === 'student') {
+          try {
+            const res = await supabaseClient.from('submissions').select('data').eq('student_id', String(userKey)).maybeSingle();
+            if (res.data && res.data.data && res.data.data.grading) {
+              fullData.grading = res.data.data.grading;
+            }
+          } catch (err) {
+            console.error('Cloud Grading Read Error:', err);
+          }
+        }
+
         const up = Object.assign({}, allSubmissions, { [userKey]: fullData });
 
         setAllSubmissions(up);
@@ -759,21 +847,52 @@
         }
       };
 
-      const saveTeacherGrading = function() {
+      const saveTeacherGrading = async function() {
         if (!gradingStudentId) return;
-        const target = allSubmissions[gradingStudentId];
+        let target = allSubmissions[gradingStudentId];
         if (!target) return;
 
-        const score1 = Number(gradingForm.r1_content) + Number(gradingForm.r1_analysis);
-        const score2 = Number(gradingForm.r2_content) + Number(gradingForm.r2_analysis);
-        const total = score1 + score2;
+        // 채점 직전에 클라우드에서 학생의 최신 보고서를 가져와 기준으로 삼음
+        if (supabaseClient) {
+          try {
+            const res = await supabaseClient.from('submissions').select('data').eq('student_id', String(gradingStudentId)).maybeSingle();
+            if (res.data && res.data.data) target = res.data.data;
+          } catch (err) {
+            console.error('Cloud Report Read Error:', err);
+          }
+        }
+
+        const nowStr = new Date().toLocaleString('ko-KR');
+        const prevGrading = target.grading || {};
+
+        // 과제별 채점 정보: 학생이 다시 제출(내용 수정)한 뒤 채점하면 차수가 1씩 올라감
+        const buildSlotGrade = function(slot, key, score) {
+          const rep = target.reports && target.reports[slot];
+          if (!rep) return prevGrading[key] || null;
+          const prev = prevGrading[key];
+          const sameVersion = prev && prev.reportVersion === rep.updatedAt;
+          return {
+            score: score,
+            round: prev ? (sameVersion ? prev.round : prev.round + 1) : 1,
+            reportVersion: rep.updatedAt,
+            gradedAt: nowStr
+          };
+        };
+
+        const r1Grade = buildSlotGrade('report1', 'r1', Number(gradingForm.r1_content) + Number(gradingForm.r1_analysis));
+        const r2Grade = buildSlotGrade('report2', 'r2', Number(gradingForm.r2_content) + Number(gradingForm.r2_analysis));
+        const score1 = r1Grade ? r1Grade.score : undefined;
+        const score2 = r2Grade ? r2Grade.score : undefined;
+        const total = (score1 || 0) + (score2 || 0);
 
         const updatedStudent = Object.assign({}, target, {
           grading: Object.assign({}, gradingForm, {
+            r1: r1Grade,
+            r2: r2Grade,
             score1: score1,
             score2: score2,
             totalScore: total,
-            gradedAt: new Date().toLocaleString('ko-KR')
+            gradedAt: nowStr
           })
         });
 
@@ -890,7 +1009,7 @@
 
       
       const downloadCSV = function() {
-        const rows = [['학번', '성명', '과제1 주제', '과제1 점수(30)', '과제1 제출', '과제2 주제', '과제2 점수(30)', '과제2 제출', '총점(60)', '세특 메모']];
+        const rows = [['학번', '성명', '과제1 주제', '과제1 점수(30)', '과제1 상태', '과제2 주제', '과제2 점수(30)', '과제2 상태', '총점(60)', '세특 메모']];
         Object.values(allSubmissions).forEach(function(s) {
           const r1 = s.reports && s.reports.report1;
           const r2 = s.reports && s.reports.report2;
@@ -901,12 +1020,12 @@
           rows.push([
             s.studentId,
             s.studentName,
-            r1 ? ('"' + r1.topicTitle.replace(/"/g, '""') + '"') : '미선택',
+            r1 ? ('"' + (r1.topicTitle || '').replace(/"/g, '""') + '"') : '미선택',
             sc1,
-            r1 && r1.isSubmitted ? '제출' : '미제출',
-            r2 ? ('"' + r2.topicTitle.replace(/"/g, '""') + '"') : '미선택',
+            '"' + getSlotStatus(s, 'report1').label + '"',
+            r2 ? ('"' + (r2.topicTitle || '').replace(/"/g, '""') + '"') : '미선택',
             sc2,
-            r2 && r2.isSubmitted ? '제출' : '미제출',
+            '"' + getSlotStatus(s, 'report2').label + '"',
             total,
             '"' + ((s.grading && s.grading.teacherFeedback) || '').replace(/"/g, '""') + '"'
           ]);
@@ -1361,7 +1480,7 @@
           mainTab === 'my_reports' && currentUser && currentUser.role === 'student' && e('div', { className: 'space-y-6' },
             e('div', { className: 'bg-gradient-to-r from-rose-900 to-indigo-950 rounded-3xl p-6 text-white' },
               e('h2', { className: 'text-xl font-black' }, currentUser.name + ' (' + currentUser.id + ') 님의 개인 탐구 2개 종합 정리'),
-              e('p', { className: 'text-xs text-slate-300 mt-1' }, '각 과제당 30점씩 총 60점 만점 구조입니다. 최종 제출 여부를 확인하세요.')
+              e('p', { className: 'text-xs text-slate-300 mt-1' }, '각 과제당 30점씩 총 60점 만점 구조입니다. 제출 상태와 채점 결과가 이 화면에 실시간으로 표시됩니다.')
             ),
             e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
               ['report1', 'report2'].map(function(slot, idx) {
@@ -1370,8 +1489,27 @@
                   e('div', null,
                     e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-100 mb-4' },
                       e('h3', { className: 'text-base font-extrabold text-slate-900' }, '선택 과제 ' + (idx + 1) + ' (30점 만점)'),
-                      e('span', { className: 'text-2xs font-extrabold px-2.5 py-1 rounded-full ' + (rep && rep.isSubmitted ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500') }, rep && rep.isSubmitted ? '최종 제출 완료' : '미제출')
+                      e(StatusBadge, { status: getSlotStatus(allSubmissions[currentUser.id], slot) })
                     ),
+                    (function() {
+                      const st = getSlotStatus(allSubmissions[currentUser.id], slot);
+                      if (st.kind === 'graded') {
+                        return e('div', { className: 'mb-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between' },
+                          e('div', null,
+                            e('p', { className: 'text-2xs font-bold text-emerald-700' }, st.round + '차 채점 결과'),
+                            e('p', { className: 'text-2xl font-black text-emerald-900' }, st.score + '점')
+                          ),
+                          e('span', { className: 'text-2xs text-emerald-700' }, '30점 만점')
+                        );
+                      }
+                      if (st.kind === 'submitted' || st.kind === 'resubmitted') {
+                        return e('div', { className: 'mb-4 p-3 rounded-2xl bg-blue-50 border border-blue-200 text-2xs text-blue-800 flex items-center gap-1.5' },
+                          e('i', { className: 'fa-solid fa-hourglass-half' }),
+                          e('span', null, '선생님의 채점을 기다리고 있습니다. 채점이 끝나면 이 화면에 바로 표시됩니다.')
+                        );
+                      }
+                      return null;
+                    })(),
                     rep ? e('div', { className: 'space-y-2 text-xs' },
                       e('p', { className: 'font-bold text-slate-900 text-sm' }, '주제: ' + rep.topicTitle),
                       e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-slate-100 text-slate-700' },
@@ -1413,7 +1551,7 @@
                     e('span', null, '클라우드 동기화 중...')
                   )
                 ),
-                e('h2', { className: 'text-xl font-black' }, '송악고 음악 교사 평가 관리 대시보드'),
+                e('h2', { className: 'text-xl font-black' }, '송악고 음악과 교사 평가 관리 대시보드'),
                 e('p', { className: 'text-xs text-slate-300 mt-1' }, '실시간 클라우드 연동: 전교생 제출 현황 실시간 집계, 60점 만점 채점, CSV 엑셀 내보내기')
               ),
               e('div', { className: 'flex flex-wrap gap-2' },
@@ -1449,9 +1587,9 @@
                     e('th', { className: 'py-2 px-3' }, '학번'),
                     e('th', { className: 'px-3' }, '이름'),
                     e('th', { className: 'px-3' }, '과제 1 주제'),
-                    e('th', { className: 'px-3' }, '과제 1 점수(30)'),
+                    e('th', { className: 'px-3' }, '과제 1 상태·점수(30)'),
                     e('th', { className: 'px-3' }, '과제 2 주제'),
-                    e('th', { className: 'px-3' }, '과제 2 점수(30)'),
+                    e('th', { className: 'px-3' }, '과제 2 상태·점수(30)'),
                     e('th', { className: 'px-3' }, '총점(60)'),
                     e('th', { className: 'px-3 text-center' }, '상세/채점')
                   )
@@ -1461,17 +1599,15 @@
                     e('td', { colSpan: 8, className: 'py-8 text-center text-slate-400' }, '아직 제출된 학생 데이터가 없습니다. 학생이 로그인하여 작성하면 실시간으로 표시됩니다.')
                   ) :
                   Object.values(allSubmissions).map(function(s) {
-                    const sc1 = s.grading && s.grading.score1 !== undefined ? (s.grading.score1 + '점') : '-';
-                    const sc2 = s.grading && s.grading.score2 !== undefined ? (s.grading.score2 + '점') : '-';
                     const total = s.grading && s.grading.totalScore !== undefined ? (s.grading.totalScore + '점') : '미채점';
 
                     return e('tr', { key: s.studentId },
                       e('td', { className: 'py-3 px-3 font-mono font-bold' }, s.studentId),
                       e('td', { className: 'px-3' }, s.studentName),
                       e('td', { className: 'px-3 max-w-[160px] truncate' }, (s.reports && s.reports.report1 && s.reports.report1.topicTitle) || '미선택'),
-                      e('td', { className: 'px-3 font-mono font-bold text-slate-700' }, sc1),
+                      e('td', { className: 'px-3' }, e(StatusBadge, { status: getSlotStatus(s, 'report1') })),
                       e('td', { className: 'px-3 max-w-[160px] truncate' }, (s.reports && s.reports.report2 && s.reports.report2.topicTitle) || '미선택'),
-                      e('td', { className: 'px-3 font-mono font-bold text-slate-700' }, sc2),
+                      e('td', { className: 'px-3' }, e(StatusBadge, { status: getSlotStatus(s, 'report2') })),
                       e('td', { className: 'px-3 font-mono font-black text-indigo-600' }, total),
                       e('td', { className: 'px-3 text-center' },
                         e('div', { className: 'flex items-center justify-center gap-1.5' },
@@ -2154,9 +2290,7 @@
                 e('div', { className: 'p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2' },
                   e('div', { className: 'flex items-center justify-between' },
                     e('span', { className: 'font-bold text-slate-800' }, '과제 1 제출 내용'),
-                    e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800' },
-                      (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.isSubmitted) ? '제출 완료' : '미제출'
-                    )
+                    e(StatusBadge, { status: getSlotStatus(allSubmissions[gradingStudentId], 'report1') })
                   ),
                   e('p', { className: 'font-bold text-slate-900 text-sm' },
                     (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.topicTitle) || '미선택'
@@ -2177,9 +2311,7 @@
                 e('div', { className: 'p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2' },
                   e('div', { className: 'flex items-center justify-between' },
                     e('span', { className: 'font-bold text-slate-800' }, '과제 2 제출 내용'),
-                    e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800' },
-                      (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.isSubmitted) ? '제출 완료' : '미제출'
-                    )
+                    e(StatusBadge, { status: getSlotStatus(allSubmissions[gradingStudentId], 'report2') })
                   ),
                   e('p', { className: 'font-bold text-slate-900 text-sm' },
                     (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.topicTitle) || '미선택'
