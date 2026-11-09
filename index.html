@@ -381,9 +381,197 @@
 
     function StatusBadge(props) {
       const st = props.status;
-      return e('span', { className: 'inline-flex items-center gap-1 text-2xs font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap ' + STATUS_STYLE[st.kind] },
+      const cls = 'inline-flex items-center gap-1 text-2xs font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap ' + STATUS_STYLE[st.kind];
+      if (props.onClick) {
+        return e('button', {
+          type: 'button',
+          onClick: props.onClick,
+          title: '눌러서 보고서 보기',
+          className: cls + ' cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-slate-300 transition'
+        },
+          e('i', { className: 'fa-solid ' + STATUS_ICON[st.kind] }),
+          e('span', null, st.label),
+          e('i', { className: 'fa-solid fa-chevron-right opacity-60 ml-0.5' })
+        );
+      }
+      return e('span', { className: cls },
         e('i', { className: 'fa-solid ' + STATUS_ICON[st.kind] }),
         e('span', null, st.label)
+      );
+    }
+
+    function isGradableStatus(st) {
+      return st.kind === 'submitted' || st.kind === 'resubmitted' || st.kind === 'graded';
+    }
+
+    const CONTENT_OPTIONS = [
+      [15, '15점 - 탐구 내용이 주제와 일치하고 매우 충실함'],
+      [10, '10점 - 대체로 일치하나 일부 보완이 필요함'],
+      [5, '5점 - 탐구 내용이 미흡하거나 주제와 불일치함']
+    ];
+    const ANALYSIS_OPTIONS = [
+      [15, '15점 - 자료 분석 및 AI 비판적 검증/캡처 완비'],
+      [10, '10점 - 자료 분석은 있으나 AI 검증 내용이 미흡함'],
+      [5, '5점 - 단순 복사 또는 자료 분석에 오류가 많음']
+    ];
+
+    // =========================================================
+    // [보고서 보기] 학생이 작성한 보고서를 작성 화면 구성 그대로 보여 주기
+    // =========================================================
+    const CATEGORY_META = {
+      inquiry: { label: '주제 1. 교과 융합 탐구', badge: 'bg-indigo-100 text-indigo-800', bar: 'bg-indigo-500', box: 'bg-indigo-50/50 border-indigo-200' },
+      product: { label: '주제 2. 음악 문화유산 상품 개발', badge: 'bg-emerald-100 text-emerald-800', bar: 'bg-emerald-500', box: 'bg-emerald-50/50 border-emerald-200' },
+      pop_history: { label: '주제 3. 대중음악사 & 미래 음악 예측', badge: 'bg-teal-100 text-teal-800', bar: 'bg-teal-500', box: 'bg-teal-50/50 border-teal-200' },
+      east_west: { label: '주제 4. 국악·서양음악 교차 실증 탐구', badge: 'bg-amber-100 text-amber-800', bar: 'bg-amber-500', box: 'bg-amber-50/50 border-amber-200' }
+    };
+
+    function isFilled(v) {
+      return typeof v === 'string' ? v.trim().length > 0 : !!v;
+    }
+
+    // 진행도 계산에 쓰는 항목 목록 (작성 화면의 입력 칸과 같은 순서)
+    function getReportFieldValues(rep) {
+      const ai = rep.aiLog || {};
+      const cat = rep.topicCategory || 'inquiry';
+      let vals = [rep.topicTitle];
+      if (cat === 'inquiry') {
+        vals = vals.concat([rep.coreConcept, rep.hypothesis, rep.variables, rep.procedure, rep.conclusion, rep.limitations]);
+      } else if (cat === 'product') {
+        vals = vals.concat([rep.brandName, rep.productTrait, rep.productHow, rep.productImpact, rep.productPrecaution]);
+      } else if (cat === 'pop_history') {
+        POP_ERAS.forEach(function(era, i) {
+          const k = (rep.popKorean100 && rep.popKorean100[i]) || {};
+          const g = (rep.popGlobal100 && rep.popGlobal100[i]) || {};
+          vals.push(k.song, k.history, g.song, g.history);
+        });
+        const f = rep.popFutureThree || {};
+        vals = vals.concat([f.creator, f.form, f.value]);
+      } else if (cat === 'east_west') {
+        vals = vals.concat([rep.ewStep1Theory, rep.ewStep2Hypothesis, rep.ewStep3Variables, rep.ewStep4Empirical, rep.ewStep5Comparison]);
+      }
+      return vals.concat([ai.prompt, ai.screenshotImg, ai.criticalReview]);
+    }
+
+    function getReportProgress(rep) {
+      const vals = getReportFieldValues(rep);
+      const filled = vals.filter(isFilled).length;
+      return { filled: filled, total: vals.length, pct: Math.round(filled / vals.length * 100) };
+    }
+
+    function ReportField(props) {
+      const filled = isFilled(props.value);
+      return e('div', { className: 'space-y-1' },
+        e('p', { className: 'text-xs font-bold text-slate-800' }, props.label),
+        filled
+          ? e('div', { className: 'p-2.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap break-words' }, props.value)
+          : e('div', { className: 'p-2.5 rounded-lg border border-dashed border-rose-200 bg-rose-50/40 text-2xs text-rose-400' }, '아직 작성하지 않았습니다')
+      );
+    }
+
+    function PopHistoryTable(props) {
+      const rows = props.rows || [];
+      const done = POP_ERAS.filter(function(era, i) { const r = rows[i] || {}; return isFilled(r.song) && isFilled(r.history); }).length;
+      const cell = function(v) {
+        return e('div', { className: 'px-2 py-1.5 border-l border-slate-100 break-words ' + (isFilled(v) ? 'text-slate-700' : 'text-rose-300') }, isFilled(v) ? v : '미작성');
+      };
+      return e('div', { className: 'space-y-1' },
+        e('p', { className: 'text-xs font-bold text-slate-800' }, props.title + ' (완성 ' + done + ' / 11 구간)'),
+        e('div', { className: 'rounded-lg border border-slate-200 overflow-hidden bg-white text-2xs' },
+          e('div', { className: 'grid grid-cols-[72px_1fr_1.4fr] bg-slate-100 font-bold text-slate-600' },
+            e('div', { className: 'px-2 py-1.5' }, '시대'),
+            e('div', { className: 'px-2 py-1.5 border-l border-slate-200' }, '대표곡(가수)'),
+            e('div', { className: 'px-2 py-1.5 border-l border-slate-200' }, '역사적 사건·시대상')
+          ),
+          POP_ERAS.map(function(era, i) {
+            const r = rows[i] || {};
+            return e('div', { key: era, className: 'grid grid-cols-[72px_1fr_1.4fr] border-t border-slate-100' },
+              e('div', { className: 'px-2 py-1.5 font-black text-teal-800 bg-teal-50' }, era),
+              cell(r.song),
+              cell(r.history)
+            );
+          })
+        )
+      );
+    }
+
+    function ReportView(props) {
+      const rep = props.report;
+      if (!rep) return e('p', { className: 'text-xs text-slate-400 py-6 text-center' }, '아직 선택한 과제가 없습니다.');
+      const cat = rep.topicCategory || 'inquiry';
+      const meta = CATEGORY_META[cat] || CATEGORY_META.inquiry;
+      const prog = getReportProgress(rep);
+      const ai = rep.aiLog || {};
+      const F = function(label, value) { return e(ReportField, { key: label, label: label, value: value }); };
+
+      let body = [];
+      if (cat === 'inquiry') {
+        body = [
+          F('1. 연계 교과 및 핵심 이론 개념', rep.coreConcept),
+          F('2. 일상의 호기심 및 가설 설정', rep.hypothesis),
+          F('3. 변인 통제 설정 (독립 / 종속 / 통제변인)', rep.variables),
+          F('4. 측정 방법 및 실험 절차', rep.procedure),
+          F('5. 결론 및 음악적 시사점', rep.conclusion),
+          F('6. 한계와 후속 탐구', rep.limitations)
+        ];
+      } else if (cat === 'product') {
+        body = [
+          F('문화유산명 및 기획 상품명', rep.brandName),
+          F('1. 해당 음악의 특징', rep.productTrait),
+          F('2. 구체적으로 (개발 방식 및 구성)', rep.productHow),
+          F('3. 얻을 수 있는 기대 효과', rep.productImpact),
+          F('4. 상품 개발 및 사용(판매·체험) 시 유의할 점', rep.productPrecaution)
+        ];
+      } else if (cat === 'pop_history') {
+        const f = rep.popFutureThree || {};
+        body = [
+          e(PopHistoryTable, { key: 'kr', title: '1. 우리나라 대중음악 100년사', rows: rep.popKorean100 }),
+          e(PopHistoryTable, { key: 'gl', title: '2. 글로벌 대중음악 100년사', rows: rep.popGlobal100 }),
+          e('p', { key: 'ft', className: 'text-xs font-extrabold text-teal-950 pt-1' }, '3. 2030년 이후 미래 음악 예측'),
+          F('① 창작 주체 측면', f.creator),
+          F('② 음악 형식 측면', f.form),
+          F('③ 음악의 가치 측면', f.value)
+        ];
+      } else if (cat === 'east_west') {
+        body = [
+          F('1. 이론 학습 (서양 이론 vs 국악 이론)', rep.ewStep1Theory),
+          F('2. 탐구 영역 선택 및 가설 세우기', rep.ewStep2Hypothesis),
+          F('3. 변인 통제 설정', rep.ewStep3Variables),
+          F('4. 실증 활동 (측정·계산·설문 및 결과)', rep.ewStep4Empirical),
+          F('5. 두 체계의 같은 점과 다른 점, 한계', rep.ewStep5Comparison)
+        ];
+      }
+
+      return e('div', { className: 'space-y-3' },
+        e('div', { className: 'flex flex-wrap items-center gap-2' },
+          e('span', { className: 'text-2xs font-extrabold px-2 py-0.5 rounded ' + meta.badge }, meta.label),
+          rep.updatedAt && e('span', { className: 'text-2xs text-slate-400' }, '마지막 저장: ' + rep.updatedAt)
+        ),
+        e('div', null,
+          e('div', { className: 'flex items-center justify-between text-2xs font-bold text-slate-600 mb-1' },
+            e('span', null, '작성 진행도'),
+            e('span', null, prog.filled + ' / ' + prog.total + ' 항목 (' + prog.pct + '%)')
+          ),
+          e('div', { className: 'h-2 rounded-full bg-slate-100 overflow-hidden' },
+            e('div', { className: 'h-full rounded-full ' + meta.bar, style: { width: prog.pct + '%' } })
+          )
+        ),
+        F('탐구/기획 주제명', rep.topicTitle),
+        e('div', { className: 'space-y-3 p-4 rounded-2xl border ' + meta.box }, body),
+        e('div', { className: 'space-y-3 p-4 rounded-2xl bg-purple-50 border border-purple-200' },
+          e('p', { className: 'text-xs font-extrabold text-purple-950 flex items-center gap-1.5' },
+            e('i', { className: 'fa-solid fa-robot text-purple-600' }),
+            e('span', null, 'AI 활용 기록 및 비판적 검증')
+          ),
+          F('AI에게 입력한 질문(프롬프트)', ai.prompt),
+          e('div', { className: 'space-y-1' },
+            e('p', { className: 'text-xs font-bold text-slate-800' }, 'AI와의 실제 대화 캡처 사진'),
+            ai.screenshotImg
+              ? e('div', { className: 'p-1 rounded-lg bg-white border border-purple-200 flex justify-center' },
+                  e('img', { src: ai.screenshotImg, alt: 'AI 대화 캡처', className: 'max-h-80 object-contain rounded' }))
+              : e('div', { className: 'p-2.5 rounded-lg border border-dashed border-rose-200 bg-rose-50/40 text-2xs text-rose-400' }, '첨부한 사진이 없습니다')
+          ),
+          F('학생의 비판적 검증 및 교정 내용', ai.criticalReview)
+        )
       );
     }
 
@@ -456,6 +644,8 @@
 
       // 교사용 개별 학생 채점 모달 상태
       const [gradingStudentId, setGradingStudentId] = useState(null);
+      // 과제 하나만 열어 보고 채점하는 창: { studentId, slot }
+      const [slotViewer, setSlotViewer] = useState(null);
       const [gradingForm, setGradingForm] = useState({
         r1_content: 15,
         r1_analysis: 15,
@@ -847,15 +1037,32 @@
         }
       };
 
-      const saveTeacherGrading = async function() {
-        if (!gradingStudentId) return;
-        let target = allSubmissions[gradingStudentId];
+      const initGradingForm = function(s) {
+        const g = s.grading || {};
+        setGradingForm({
+          r1_content: g.r1_content || 15,
+          r1_analysis: g.r1_analysis || 15,
+          r2_content: g.r2_content || 15,
+          r2_analysis: g.r2_analysis || 15,
+          teacherFeedback: g.teacherFeedback || ''
+        });
+      };
+
+      const openSlotViewer = function(s, slot) {
+        initGradingForm(s);
+        setSlotViewer({ studentId: s.studentId, slot: slot });
+      };
+
+      // slots: 이번에 채점할 과제 목록 (['report1'], ['report2'], 또는 둘 다). 나머지 과제의 기존 점수는 그대로 둠
+      const saveGrading = async function(studentId, slots) {
+        if (!studentId) return;
+        let target = allSubmissions[studentId];
         if (!target) return;
 
         // 채점 직전에 클라우드에서 학생의 최신 보고서를 가져와 기준으로 삼음
         if (supabaseClient) {
           try {
-            const res = await supabaseClient.from('submissions').select('data').eq('student_id', String(gradingStudentId)).maybeSingle();
+            const res = await supabaseClient.from('submissions').select('data').eq('student_id', String(studentId)).maybeSingle();
             if (res.data && res.data.data) target = res.data.data;
           } catch (err) {
             console.error('Cloud Report Read Error:', err);
@@ -868,8 +1075,9 @@
         // 과제별 채점 정보: 학생이 다시 제출(내용 수정)한 뒤 채점하면 차수가 1씩 올라감
         const buildSlotGrade = function(slot, key, score) {
           const rep = target.reports && target.reports[slot];
-          if (!rep) return prevGrading[key] || null;
-          const prev = prevGrading[key];
+          const legacy = prevGrading[slot === 'report1' ? 'score1' : 'score2'];
+          const prev = prevGrading[key] || (rep && legacy !== undefined ? { score: legacy, round: 1, reportVersion: rep.updatedAt, gradedAt: prevGrading.gradedAt } : null);
+          if (slots.indexOf(slot) === -1 || !rep) return prev;
           const sameVersion = prev && prev.reportVersion === rep.updatedAt;
           return {
             score: score,
@@ -891,20 +1099,66 @@
             r2: r2Grade,
             score1: score1,
             score2: score2,
-            totalScore: total,
-            gradedAt: nowStr
+            totalScore: (r1Grade || r2Grade) ? total : undefined,
+            gradedAt: slots.length ? nowStr : prevGrading.gradedAt
           })
         });
 
-        const up = Object.assign({}, allSubmissions, { [gradingStudentId]: updatedStudent });
-        setAllSubmissions(up);
-        localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+        setAllSubmissions(function(prev) {
+          const up = Object.assign({}, prev, { [studentId]: updatedStudent });
+          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+          return up;
+        });
 
         // 채점 결과도 클라우드에 영구 저장
-        syncStudentToCloud(gradingStudentId, updatedStudent);
+        syncStudentToCloud(studentId, updatedStudent);
 
         setGradingStudentId(null);
-        showToast(target.studentName + ' 학생 채점이 저장되었습니다! (총점 ' + total + '점 / 60점) 🌟');
+        setSlotViewer(null);
+        const which = slots.length === 1 ? ('과제 ' + (slots[0] === 'report1' ? '1' : '2') + ' ') : '';
+        showToast(target.studentName + ' 학생 ' + which + '채점이 저장되었습니다. (총점 ' + total + '점 / 60점) 🌟');
+      };
+
+      // 채점 창의 과제별 점수 선택 영역
+      const renderGradePanel = function(slot) {
+        const n = slot === 'report1' ? '1' : '2';
+        const ck = 'r' + n + '_content';
+        const ak = 'r' + n + '_analysis';
+        const subtotal = Number(gradingForm[ck]) + Number(gradingForm[ak]);
+        const sel = function(key, label, options) {
+          return e('div', null,
+            e('label', { className: 'block text-slate-700 font-bold mb-1' }, label),
+            e('select', {
+              value: gradingForm[key],
+              onChange: function(ev) {
+                const u = {};
+                u[key] = Number(ev.target.value);
+                setGradingForm(Object.assign({}, gradingForm, u));
+              },
+              className: 'w-full p-2 border rounded-lg bg-white'
+            }, options.map(function(o) { return e('option', { key: o[0], value: o[0] }, o[1]); }))
+          );
+        };
+        return e('div', { className: 'p-4 bg-white rounded-xl border-2 border-purple-200 space-y-3 text-xs' },
+          e('div', { className: 'flex items-center justify-between' },
+            e('span', { className: 'font-bold text-purple-950 flex items-center gap-1.5' },
+              e('i', { className: 'fa-solid fa-marker text-purple-600' }),
+              e('span', null, '과제 ' + n + ' 채점 (30점 만점, 5점 급간)')
+            ),
+            e('span', { className: 'font-bold text-indigo-600' }, '소계: ' + subtotal + '점')
+          ),
+          e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+            sel(ck, '탐구 내용 일치성 및 충실도 (15점)', CONTENT_OPTIONS),
+            sel(ak, '자료 분석 및 AI 비판 검증 (15점)', ANALYSIS_OPTIONS)
+          )
+        );
+      };
+
+      const renderNotGradable = function() {
+        return e('div', { className: 'p-3 rounded-xl bg-slate-100 text-slate-600 text-2xs flex items-center gap-1.5' },
+          e('i', { className: 'fa-solid fa-circle-info' }),
+          e('span', null, '학생이 아직 최종 제출하지 않아 채점할 수 없습니다. 제출하면 바로 채점할 수 있어요.')
+        );
       };
 
       // [신규] 교사용 개별 학생 정보 수정 저장 (학번/이름 변경)
@@ -1605,21 +1859,21 @@
                       e('td', { className: 'py-3 px-3 font-mono font-bold' }, s.studentId),
                       e('td', { className: 'px-3' }, s.studentName),
                       e('td', { className: 'px-3 max-w-[160px] truncate' }, (s.reports && s.reports.report1 && s.reports.report1.topicTitle) || '미선택'),
-                      e('td', { className: 'px-3' }, e(StatusBadge, { status: getSlotStatus(s, 'report1') })),
+                      e('td', { className: 'px-3' }, (function() {
+                        const st = getSlotStatus(s, 'report1');
+                        return e(StatusBadge, { status: st, onClick: st.kind === 'none' ? null : function() { openSlotViewer(s, 'report1'); } });
+                      })()),
                       e('td', { className: 'px-3 max-w-[160px] truncate' }, (s.reports && s.reports.report2 && s.reports.report2.topicTitle) || '미선택'),
-                      e('td', { className: 'px-3' }, e(StatusBadge, { status: getSlotStatus(s, 'report2') })),
+                      e('td', { className: 'px-3' }, (function() {
+                        const st = getSlotStatus(s, 'report2');
+                        return e(StatusBadge, { status: st, onClick: st.kind === 'none' ? null : function() { openSlotViewer(s, 'report2'); } });
+                      })()),
                       e('td', { className: 'px-3 font-mono font-black text-indigo-600' }, total),
                       e('td', { className: 'px-3 text-center' },
                         e('div', { className: 'flex items-center justify-center gap-1.5' },
                         e('button', { onClick: function() {
                           setGradingStudentId(s.studentId);
-                          setGradingForm({
-                            r1_content: (s.grading && s.grading.r1_content) || 15,
-                            r1_analysis: (s.grading && s.grading.r1_analysis) || 15,
-                            r2_content: (s.grading && s.grading.r2_content) || 15,
-                            r2_analysis: (s.grading && s.grading.r2_analysis) || 15,
-                            teacherFeedback: (s.grading && s.grading.teacherFeedback) || ''
-                          });
+                          initGradingForm(s);
                         }, className: 'px-2.5 py-1 rounded bg-slate-900 text-white font-bold text-2xs hover:bg-slate-800' }, '채점하기'),
                            // [신규] 상세/채점 옆 '편집 및 삭제' 빨간색 버튼
                           e('button', { onClick: function() {
@@ -2268,166 +2522,104 @@
           )
         ),
 
-        // 교사용 개별 학생 정밀 채점 모달
-        gradingStudentId && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
-          e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
-            e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
-              e('div', null,
-                e('h3', { className: 'text-base font-black text-purple-950' },
-                  (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].studentName) + ' (' + gradingStudentId + ') 학생 수행평가 채점'
+        // 교사용 개별 학생 정밀 채점 모달 (과제 1·2 보고서를 작성 화면 구성 그대로 보여 주고 채점)
+        gradingStudentId && allSubmissions[gradingStudentId] && (function() {
+          const sub = allSubmissions[gradingStudentId];
+          const gradableSlots = ['report1', 'report2'].filter(function(slot) { return isGradableStatus(getSlotStatus(sub, slot)); });
+          const liveTotal = gradableSlots.reduce(function(sum, slot) {
+            const n = slot === 'report1' ? '1' : '2';
+            return sum + Number(gradingForm['r' + n + '_content']) + Number(gradingForm['r' + n + '_analysis']);
+          }, 0);
+          return e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
+            e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden' },
+              e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
+                e('div', null,
+                  e('h3', { className: 'text-base font-black text-purple-950' }, sub.studentName + ' (' + sub.studentId + ') 학생 수행평가 채점'),
+                  e('p', { className: 'text-xs text-purple-700 mt-0.5' }, '과제별 보고서를 학생이 작성한 화면 구성 그대로 확인하고, 제출된 과제만 채점합니다. (과제당 30점, 총 60점)')
                 ),
-                e('p', { className: 'text-xs text-purple-700 mt-0.5' },
-                  '개인 탐구 2개 채점 (과제 1: 30점 만점 + 과제 2: 30점 만점 = 총 60점 만점, 5점 급간 루브릭)'
-                )
-              ),
-              e('button', { onClick: function() { setGradingStudentId(null); }, className: 'text-slate-400 hover:text-slate-600' },
-                e('i', { className: 'fa-solid fa-xmark text-lg' })
-              )
-            ),
-
-            e('div', { className: 'p-6 overflow-y-auto space-y-6 flex-1 text-xs' },
-              e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
-                e('div', { className: 'p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2' },
-                  e('div', { className: 'flex items-center justify-between' },
-                    e('span', { className: 'font-bold text-slate-800' }, '과제 1 제출 내용'),
-                    e(StatusBadge, { status: getSlotStatus(allSubmissions[gradingStudentId], 'report1') })
-                  ),
-                  e('p', { className: 'font-bold text-slate-900 text-sm' },
-                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.topicTitle) || '미선택'
-                  ),
-                  e('p', { className: 'text-slate-600 line-clamp-4 leading-relaxed' },
-                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && (allSubmissions[gradingStudentId].reports.report1.procedure || allSubmissions[gradingStudentId].reports.report1.productHow || allSubmissions[gradingStudentId].reports.report1.ewStep4Empirical || ((allSubmissions[gradingStudentId].reports.report1.popKorean100 && allSubmissions[gradingStudentId].reports.report1.popKorean100[0] && allSubmissions[gradingStudentId].reports.report1.popKorean100[0].song) || ''))) || '작성된 내용이 없습니다.'
-                  ),
-                  e('div', { className: 'text-2xs text-purple-800 bg-purple-50 p-2.5 rounded-lg space-y-1' },
-                    e('p', null, e('strong', null, 'AI 질문: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.aiLog && allSubmissions[gradingStudentId].reports.report1.aiLog.prompt) || '없음'),
-                    e('p', null, e('strong', null, '비판 검증: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.aiLog && allSubmissions[gradingStudentId].reports.report1.aiLog.criticalReview) || '없음'),
-                    allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report1 && allSubmissions[gradingStudentId].reports.report1.aiLog && allSubmissions[gradingStudentId].reports.report1.aiLog.screenshotImg && e('div', { className: 'pt-1' },
-                      e('span', { className: 'font-bold text-purple-900 block mb-0.5' }, '캡처 사진:'),
-                      e('img', { src: allSubmissions[gradingStudentId].reports.report1.aiLog.screenshotImg, alt: 'AI 캡처', className: 'max-h-24 rounded border border-purple-200' })
-                    )
-                  )
-                ),
-
-                e('div', { className: 'p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2' },
-                  e('div', { className: 'flex items-center justify-between' },
-                    e('span', { className: 'font-bold text-slate-800' }, '과제 2 제출 내용'),
-                    e(StatusBadge, { status: getSlotStatus(allSubmissions[gradingStudentId], 'report2') })
-                  ),
-                  e('p', { className: 'font-bold text-slate-900 text-sm' },
-                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.topicTitle) || '미선택'
-                  ),
-                  e('p', { className: 'text-slate-600 line-clamp-4 leading-relaxed' },
-                    (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && (allSubmissions[gradingStudentId].reports.report2.procedure || allSubmissions[gradingStudentId].reports.report2.productHow || allSubmissions[gradingStudentId].reports.report2.ewStep4Empirical || ((allSubmissions[gradingStudentId].reports.report2.popKorean100 && allSubmissions[gradingStudentId].reports.report2.popKorean100[0] && allSubmissions[gradingStudentId].reports.report2.popKorean100[0].song) || ''))) || '작성된 내용이 없습니다.'
-                  ),
-                  e('div', { className: 'text-2xs text-purple-800 bg-purple-50 p-2.5 rounded-lg space-y-1' },
-                    e('p', null, e('strong', null, 'AI 질문: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.aiLog && allSubmissions[gradingStudentId].reports.report2.aiLog.prompt) || '없음'),
-                    e('p', null, e('strong', null, '비판 검증: '), (allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.aiLog && allSubmissions[gradingStudentId].reports.report2.aiLog.criticalReview) || '없음'),
-                    allSubmissions[gradingStudentId] && allSubmissions[gradingStudentId].reports && allSubmissions[gradingStudentId].reports.report2 && allSubmissions[gradingStudentId].reports.report2.aiLog && allSubmissions[gradingStudentId].reports.report2.aiLog.screenshotImg && e('div', { className: 'pt-1' },
-                      e('span', { className: 'font-bold text-purple-900 block mb-0.5' }, '캡처 사진:'),
-                      e('img', { src: allSubmissions[gradingStudentId].reports.report2.aiLog.screenshotImg, alt: 'AI 캡처', className: 'max-h-24 rounded border border-purple-200' })
-                    )
-                  )
+                e('button', { onClick: function() { setGradingStudentId(null); }, className: 'text-slate-400 hover:text-slate-600' },
+                  e('i', { className: 'fa-solid fa-xmark text-lg' })
                 )
               ),
 
-              // 5점 급간 채점표
-              e('div', { className: 'p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4' },
-                e('div', { className: 'flex items-center justify-between' },
-                  e('h4', { className: 'font-extrabold text-slate-900 text-sm' }, '개인 탐구 5점 급간 채점 배점표'),
-                  e('span', { className: 'font-mono font-black text-indigo-600 text-sm' },
-                    '현재 합산 총점: ' + (Number(gradingForm.r1_content) + Number(gradingForm.r1_analysis) + Number(gradingForm.r2_content) + Number(gradingForm.r2_analysis)) + ' / 60점'
-                  )
-                ),
-
-                // 과제 1 (30점 만점)
-                e('div', { className: 'p-4 bg-white rounded-xl border border-slate-200 space-y-3' },
-                  e('div', { className: 'flex items-center justify-between' },
-                    e('span', { className: 'font-bold text-slate-900' }, '과제 1 평가 배점 (30점 만점)'),
-                    e('span', { className: 'font-bold text-indigo-600' }, '과제 1 소계: ' + (Number(gradingForm.r1_content) + Number(gradingForm.r1_analysis)) + '점')
-                  ),
-                  e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
-                    e('div', null,
-                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '탐구 내용 일치성 및 충실도 (15점)'),
-                      e('select', {
-                        value: gradingForm.r1_content,
-                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r1_content: Number(ev.target.value) })); },
-                        className: 'w-full p-2 border rounded-lg bg-white'
-                      },
-                        e('option', { value: 15 }, '15점 - 탐구 내용이 주제와 일치하고 매우 충실함'),
-                        e('option', { value: 10 }, '10점 - 대체로 일치하나 일부 보완이 필요함'),
-                        e('option', { value: 5 }, '5점 - 탐구 내용이 미흡하거나 주제와 불일치함')
-                      )
+              e('div', { className: 'p-6 overflow-y-auto space-y-6 flex-1 text-xs' },
+                ['report1', 'report2'].map(function(slot) {
+                  const n = slot === 'report1' ? '1' : '2';
+                  const st = getSlotStatus(sub, slot);
+                  const rep = sub.reports && sub.reports[slot];
+                  return e('section', { key: slot, className: 'rounded-2xl border-2 border-slate-200 overflow-hidden' },
+                    e('div', { className: 'px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2' },
+                      e('h4', { className: 'font-extrabold text-sm text-slate-900' }, '과제 ' + n),
+                      e(StatusBadge, { status: st })
                     ),
-                    e('div', null,
-                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '자료 분석 및 AI 비판 검증 (15점)'),
-                      e('select', {
-                        value: gradingForm.r1_analysis,
-                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r1_analysis: Number(ev.target.value) })); },
-                        className: 'w-full p-2 border rounded-lg bg-white'
-                      },
-                        e('option', { value: 15 }, '15점 - 자료 분석 및 AI 비판적 검증/캡처 완비'),
-                        e('option', { value: 10 }, '10점 - 자료 분석은 있으나 AI 검증 내용이 미흡함'),
-                        e('option', { value: 5 }, '5점 - 단순 복사 또는 자료 분석에 오류가 많음')
-                      )
+                    e('div', { className: 'p-4 space-y-4' },
+                      e(ReportView, { report: rep }),
+                      rep ? (isGradableStatus(st) ? renderGradePanel(slot) : renderNotGradable()) : null
                     )
-                  )
+                  );
+                }),
+
+                e('div', { className: 'p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-between' },
+                  e('span', { className: 'font-bold text-indigo-950' }, '이번에 저장할 합산 점수 (제출된 과제 기준)'),
+                  e('span', { className: 'font-mono font-black text-indigo-700 text-sm' }, liveTotal + ' / ' + (gradableSlots.length * 30) + '점')
                 ),
 
-                // 과제 2 (30점 만점)
-                e('div', { className: 'p-4 bg-white rounded-xl border border-slate-200 space-y-3' },
-                  e('div', { className: 'flex items-center justify-between' },
-                    e('span', { className: 'font-bold text-slate-900' }, '과제 2 평가 배점 (30점 만점)'),
-                    e('span', { className: 'font-bold text-indigo-600' }, '과제 2 소계: ' + (Number(gradingForm.r2_content) + Number(gradingForm.r2_analysis)) + '점')
-                  ),
-                  e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
-                    e('div', null,
-                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '탐구 내용 일치성 및 충실도 (15점)'),
-                      e('select', {
-                        value: gradingForm.r2_content,
-                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r2_content: Number(ev.target.value) })); },
-                        className: 'w-full p-2 border rounded-lg bg-white'
-                      },
-                        e('option', { value: 15 }, '15점 - 탐구 내용이 주제와 일치하고 매우 충실함'),
-                        e('option', { value: 10 }, '10점 - 대체로 일치하나 일부 보완이 필요함'),
-                        e('option', { value: 5 }, '5점 - 탐구 내용이 미흡하거나 주제와 불일치함')
-                      )
-                    ),
-                    e('div', null,
-                      e('label', { className: 'block text-slate-700 font-bold mb-1' }, '자료 분석 및 AI 비판 검증 (15점)'),
-                      e('select', {
-                        value: gradingForm.r2_analysis,
-                        onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { r2_analysis: Number(ev.target.value) })); },
-                        className: 'w-full p-2 border rounded-lg bg-white'
-                      },
-                        e('option', { value: 15 }, '15점 - 자료 분석 및 AI 비판적 검증/캡처 완비'),
-                        e('option', { value: 10 }, '10점 - 자료 분석은 있으나 AI 검증 내용이 미흡함'),
-                        e('option', { value: 5 }, '5점 - 단순 복사 또는 자료 분석에 오류가 많음')
-                      )
-                    )
-                  )
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-800 mb-1' }, '학교생활기록부 세부능력 및 특기사항(세특) 메모'),
+                  e('textarea', {
+                    rows: 3,
+                    value: gradingForm.teacherFeedback,
+                    onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { teacherFeedback: ev.target.value })); },
+                    placeholder: '학생의 비판적 검증 태도, 융합적 탐구 역량, 음악적 통찰 등을 세특용 문장으로 기록하세요.',
+                    className: 'w-full p-3 border rounded-xl text-xs bg-white leading-relaxed'
+                  })
                 )
               ),
 
-              // 세특 피드백
-              e('div', null,
-                e('label', { className: 'block font-bold text-slate-800 mb-1' }, '학교생활기록부 세부능력 및 특기사항(세특) 메모'),
-                e('textarea', {
-                  rows: 3,
-                  value: gradingForm.teacherFeedback,
-                  onChange: function(ev) { setGradingForm(Object.assign({}, gradingForm, { teacherFeedback: ev.target.value })); },
-                  placeholder: '학생의 비판적 검증 태도, 융합적 탐구 역량, 음악적 통찰 등을 세특용 문장으로 기록하세요.',
-                  className: 'w-full p-3 border rounded-xl text-xs bg-white leading-relaxed'
-                })
+              e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
+                e('button', { onClick: function() { setGradingStudentId(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, '취소'),
+                e('button', { onClick: function() { saveGrading(gradingStudentId, gradableSlots); }, className: 'px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' },
+                  gradableSlots.length ? '채점 완료 및 점수 저장' : '세특 메모만 저장')
               )
-            ),
-
-            e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
-              e('button', { onClick: function() { setGradingStudentId(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, '취소'),
-              e('button', { onClick: saveTeacherGrading, className: 'px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' }, '채점 완료 및 점수 저장')
             )
-          )
-        ),
-               
+          );
+        })(),
+
+        // 과제 하나만 열어 보기 / 채점하기 모달 (표의 상태 배지를 눌렀을 때)
+        slotViewer && allSubmissions[slotViewer.studentId] && (function() {
+          const sub = allSubmissions[slotViewer.studentId];
+          const slot = slotViewer.slot;
+          const n = slot === 'report1' ? '1' : '2';
+          const st = getSlotStatus(sub, slot);
+          const rep = sub.reports && sub.reports[slot];
+          const gradable = isGradableStatus(st);
+          return e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
+            e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden' },
+              e('div', { className: 'p-5 border-b border-slate-200 flex items-start justify-between bg-slate-50' },
+                e('div', null,
+                  e('div', { className: 'flex items-center gap-2 flex-wrap' },
+                    e('span', { className: 'text-2xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800' }, '과제 ' + n),
+                    e(StatusBadge, { status: st })
+                  ),
+                  e('h3', { className: 'text-base font-black text-slate-900 mt-1' }, sub.studentName + ' (' + sub.studentId + ') 학생의 과제 ' + n + ' 보고서')
+                ),
+                e('button', { onClick: function() { setSlotViewer(null); }, className: 'text-slate-400 hover:text-slate-600' },
+                  e('i', { className: 'fa-solid fa-xmark text-lg' })
+                )
+              ),
+              e('div', { className: 'p-6 overflow-y-auto space-y-5 flex-1 text-xs' },
+                e(ReportView, { report: rep }),
+                gradable ? renderGradePanel(slot) : renderNotGradable()
+              ),
+              e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
+                e('button', { onClick: function() { setSlotViewer(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, gradable ? '취소' : '닫기'),
+                gradable && e('button', { onClick: function() { saveGrading(slotViewer.studentId, [slot]); }, className: 'px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' },
+                  st.kind === 'graded' ? '과제 ' + n + ' 점수 수정 저장' : '과제 ' + n + ' 채점 저장')
+              )
+            )
+          );
+        })(),
+
         // [신규 모달] 교사용 개별 학생 정보 수정 및 삭제 모달
         editingStudentModal && editingStudentTargetId && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in' },
           e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full space-y-4 shadow-2xl overflow-hidden' },
