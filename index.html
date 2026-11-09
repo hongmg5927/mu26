@@ -425,6 +425,11 @@
       const [selectedSubject, setSelectedSubject] = useState('all');
       const [toastMessage, setToastMessage] = useState('');
 
+      // [신규] 교사용 개별 학생 정보 편집 및 삭제 모달 상태
+      const [editingStudentModal, setEditingStudentModal] = useState(false);
+      const [editingStudentTargetId, setEditingStudentTargetId] = useState(null);
+      const [editingStudentForm, setEditingStudentForm] = useState({ id: '', name: '' });
+      
       const showToast = function(msg) {
         setToastMessage(msg);
         setTimeout(function() { setToastMessage(''); }, 2600);
@@ -570,7 +575,7 @@
       const handleTeacherLogin = function(ev) {
         ev.preventDefault();
         if (teacherIdInput === teacherAuth.id && teacherPwInput === teacherAuth.pw) {
-          const tUser = { role: 'teacher', id: teacherAuth.id, name: '음악과 교사' };
+          const tUser = { role: 'teacher', id: teacherAuth.id, name: '음악 교사' };
           updateCurrentUserSession(tUser);
           setShowTeacherModal(false);
           setTeacherIdInput('');
@@ -781,6 +786,107 @@
         showToast(target.studentName + ' 학생 채점이 저장되었습니다! (총점 ' + total + '점 / 60점) 🌟');
       };
 
+      // [신규] 교사용 개별 학생 정보 수정 저장 (학번/이름 변경)
+      const saveStudentInfoEdit = async function(ev) {
+        ev.preventDefault();
+        if (!editingStudentTargetId) return;
+        const oldId = editingStudentTargetId;
+        const newId = editingStudentForm.id.trim();
+        const newName = editingStudentForm.name.trim();
+
+        if (!/^\d{4}$/.test(newId)) {
+          showToast('학번은 4자리 숫자여야 합니다.');
+          return;
+        }
+        if (!newName) {
+          showToast('성명을 입력해 주세요.');
+          return;
+        }
+
+        const targetData = allSubmissions[oldId];
+        if (!targetData) return;
+
+        const accs = getStudentAccounts();
+        const currentPw = (accs[oldId] && accs[oldId].pw) || '0000';
+
+        if (oldId !== newId && accs[newId]) {
+          showToast('변경하려는 학번(' + newId + ')이 이미 존재합니다.');
+          return;
+        }
+
+        delete accs[oldId];
+        accs[newId] = { id: newId, name: newName, pw: currentPw };
+        localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+
+        const updatedTarget = Object.assign({}, targetData, {
+          studentId: newId,
+          studentName: newName
+        });
+
+        const upSubs = Object.assign({}, allSubmissions);
+        delete upSubs[oldId];
+        upSubs[newId] = updatedTarget;
+
+        setAllSubmissions(upSubs);
+        localStorage.setItem('music_assessment_submissions', JSON.stringify(upSubs));
+
+        if (supabaseClient) {
+          try {
+            if (oldId !== newId) {
+              await supabaseClient.from('submissions').delete().eq('student_id', String(oldId));
+            }
+            await syncStudentToCloud(newId, updatedTarget);
+          } catch(err) {
+            console.error('Student Edit Cloud Error:', err);
+          }
+        }
+
+        setEditingStudentModal(false);
+        setEditingStudentTargetId(null);
+        showToast(newName + ' 학생 정보가 성공적으로 수정되었습니다! ✏️');
+      };
+
+      // [신규] 교사용 개별 학생 데이터 영구 삭제
+      const deleteSingleStudent = async function() {
+        if (!editingStudentTargetId) return;
+        const target = allSubmissions[editingStudentTargetId];
+        const sName = (target && target.studentName) || editingStudentTargetId;
+
+        const c = prompt(
+          '정말로 ' + sName + ' (' + editingStudentTargetId + ') 학생의 모든 데이터(계정, 보고서, 채점 내역)를 삭제하시겠습니까?\n' +
+          '삭제하려면 "삭제"라고 입력하세요.'
+        );
+
+        if (c !== '삭제') {
+          showToast('삭제가 취소되었습니다.');
+          return;
+        }
+
+        const targetId = editingStudentTargetId;
+
+        const accs = getStudentAccounts();
+        delete accs[targetId];
+        localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+
+        const upSubs = Object.assign({}, allSubmissions);
+        delete upSubs[targetId];
+        setAllSubmissions(upSubs);
+        localStorage.setItem('music_assessment_submissions', JSON.stringify(upSubs));
+
+        if (supabaseClient) {
+          try {
+            await supabaseClient.from('submissions').delete().eq('student_id', String(targetId));
+          } catch(err) {
+            console.error('Student Delete Cloud Error:', err);
+          }
+        }
+
+        setEditingStudentModal(false);
+        setEditingStudentTargetId(null);
+        showToast(sName + ' 학생의 데이터가 클라우드와 로컬에서 완전히 삭제되었습니다. 🗑️');
+      };
+
+      
       const downloadCSV = function() {
         const rows = [['학번', '성명', '과제1 주제', '과제1 점수(30)', '과제1 제출', '과제2 주제', '과제2 점수(30)', '과제2 제출', '총점(60)', '세특 메모']];
         Object.values(allSubmissions).forEach(function(s) {
@@ -1376,6 +1482,16 @@
                             teacherFeedback: (s.grading && s.grading.teacherFeedback) || ''
                           });
                         }, className: 'px-2.5 py-1 rounded bg-slate-900 text-white font-bold text-2xs hover:bg-slate-800' }, '채점하기')
+                           // [신규] 상세/채점 옆 '편집 및 삭제' 빨간색 버튼
+                          e('button', { onClick: function() {
+                            setEditingStudentTargetId(s.studentId);
+                            setEditingStudentForm({ id: s.studentId, name: s.studentName });
+                            setEditingStudentModal(true);
+                          }, className: 'px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-2xs shadow-sm flex items-center gap-1' },
+                            e('i', { className: 'fa-solid fa-user-pen text-2xs' }),
+                            e('span', null, '편집 및 삭제')
+                          )
+                        )
                       )
                     );
                   })
@@ -2173,6 +2289,74 @@
             e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
               e('button', { onClick: function() { setGradingStudentId(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, '취소'),
               e('button', { onClick: saveTeacherGrading, className: 'px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow' }, '채점 완료 및 점수 저장')
+            )
+          )
+        ),
+               
+        // [신규 모달] 교사용 개별 학생 정보 수정 및 삭제 모달
+        editingStudentModal && editingStudentTargetId && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in' },
+          e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full space-y-4 shadow-2xl overflow-hidden' },
+            e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-100' },
+              e('div', { className: 'flex items-center gap-2' },
+                e('div', { className: 'w-7 h-7 rounded-lg bg-rose-600 text-white flex items-center justify-center text-xs font-bold' },
+                  e('i', { className: 'fa-solid fa-user-gear' })
+                ),
+                e('div', null,
+                  e('h3', { className: 'text-sm font-black text-slate-900' }, '학생 개별 정보 편집 및 삭제'),
+                  e('p', { className: 'text-2xs text-slate-500' }, '학번/성명을 수정하거나 해당 학생의 모든 기록을 삭제합니다.')
+                )
+              ),
+              e('button', { onClick: function() { setEditingStudentModal(false); setEditingStudentTargetId(null); }, className: 'text-slate-400 hover:text-slate-600' },
+                e('i', { className: 'fa-solid fa-xmark text-lg' })
+              )
+            ),
+
+            e('form', { onSubmit: saveStudentInfoEdit, className: 'space-y-3.5 text-xs' },
+              e('div', null,
+                e('label', { className: 'block font-bold text-slate-700 mb-1' }, '학번 (4자리 숫자)'),
+                e('input', {
+                  type: 'text',
+                  maxLength: 4,
+                  value: editingStudentForm.id,
+                  onChange: function(ev) { setEditingStudentForm(Object.assign({}, editingStudentForm, { id: ev.target.value })); },
+                  placeholder: '4자리 학번',
+                  className: 'w-full p-2.5 border rounded-xl font-mono text-xs focus:ring-2 focus:ring-rose-500',
+                  required: true
+                })
+              ),
+              e('div', null,
+                e('label', { className: 'block font-bold text-slate-700 mb-1' }, '성명'),
+                e('input', {
+                  type: 'text',
+                  value: editingStudentForm.name,
+                  onChange: function(ev) { setEditingStudentForm(Object.assign({}, editingStudentForm, { name: ev.target.value })); },
+                  placeholder: '학생 성명',
+                  className: 'w-full p-2.5 border rounded-xl text-xs focus:ring-2 focus:ring-rose-500',
+                  required: true
+                })
+              ),
+
+              e('div', { className: 'pt-2 flex items-center justify-between gap-2' },
+                e('button', {
+                  type: 'button',
+                  onClick: deleteSingleStudent,
+                  className: 'px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold border border-rose-200 transition flex items-center gap-1.5'
+                },
+                  e('i', { className: 'fa-solid fa-trash-can' }),
+                  e('span', null, '이 학생 기록 삭제')
+                ),
+                e('div', { className: 'flex items-center gap-1.5' },
+                  e('button', {
+                    type: 'button',
+                    onClick: function() { setEditingStudentModal(false); setEditingStudentTargetId(null); },
+                    className: 'px-3 py-2 rounded-xl border text-slate-600 hover:bg-slate-50 font-bold'
+                  }, '취소'),
+                  e('button', {
+                    type: 'submit',
+                    className: 'px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold shadow'
+                  }, '정보 수정 저장')
+                )
+              )
             )
           )
         ),
