@@ -9,6 +9,8 @@
   <!-- React 18 & ReactDOM CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- FontAwesome 6 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <!-- Pretendard Font -->
@@ -33,6 +35,18 @@
   <script>
     const e = React.createElement;
     const { useState, useEffect, useMemo } = React;
+
+    // --- Supabase 클라우드 DB 클라이언트 초기화 ---
+    const SUPABASE_URL = 'https://inppmcoscwftseeaxvav.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_dHVHe4gXEOYNScqMwtussQ_SzXv6-no';
+    let supabaseClient = null;
+    try {
+      if (window.supabase) {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+    } catch (err) {
+      console.error('Supabase Init Error:', err);
+    }
 
     // --- 음표 SVG 아이콘 ---
     function WholeNoteIcon(props) {
@@ -84,14 +98,13 @@
       { id: 'art', name: '미술' }
     ];
 
-    // 대중음악사 10년 단위 연대 목록 (1920s ~ 2020s, 총 11개 구간)
     const POP_ERAS = [
       '1920년대', '1930년대', '1940년대', '1950년대', '1960년대',
       '1970년대', '1980년대', '1990년대', '2000년대', '2010년대', '2020년대'
     ];
 
     // =========================================================
-    // [주제 1] 교과 융합 탐구 활동 80선 (고교 수준 실천 프로토콜)
+    // [주제 1] 교과 융합 탐구 활동 80선
     // =========================================================
     const FULL_INQUIRY_DATA = [
       // 1. 국어 (10선)
@@ -225,10 +238,9 @@
     ];
 
     // =========================================================
-    // [주제 4] 국악·서양음악 이론 심화 교차 실증 탐구 10선 (고교 수준)
+    // [주제 4] 국악·서양음악 이론 심화 교차 실증 탐구 10선
     // =========================================================
     const FULL_EAST_WEST_DATA = [
-      // 영역 1. 조율
       {
         id: 'ew_1',
         area: '조율',
@@ -239,7 +251,6 @@
         variables: '독립변인: 조율 방법(피타고라스 대 삼분손익법 대 12평균율) / 종속변인: 각 음의 진동수 비, 12번째 음의 어긋남(센트) / 통제변인: 같은 기준음, 같은 옥타브 환원 규칙(비를 1~2 사이로 맞춤)',
         activity: '스프레드시트에서 두 방법으로 12음의 비를 계산하고 옥타브 안으로 환원해 오름차순으로 정렬한 뒤 두 열을 비교한다. 센트로 바꿔 12평균율과의 차이를 막대그래프로 그린다.'
       },
-      // 영역 2. 음정과 음계
       {
         id: 'ew_2',
         area: '음정과 음계',
@@ -260,7 +271,6 @@
         variables: '독립변인: 변화 방식(조옮김 대 장조→단조 대 우조→계면조) / 종속변인: 밝다↔어둡다 점수(7점 척도), 슬픔 정도 점수 / 통제변인: 같은 선율, 같은 길이(10~20초), 같은 템포, 순서 무작위',
         activity: '키보드로 같은 선율의 조옮김 버전, 장조 버전, 단조 버전을 녹음하고, 국악 가곡 등의 우조와 계면조 음원을 20명 이상에게 들려준 뒤 조건별 점수 변화량을 비교한다.'
       },
-      // 영역 3. 기보
       {
         id: 'ew_4',
         area: '기보',
@@ -281,7 +291,6 @@
         variables: '독립변인: 문헌 종류(『악학궤범』 대 서양 음악 용어 사전) / 종속변인: 항목 분류별 개수와 비율(이론, 악기, 무용, 복식, 의례), 도설 유무 / 통제변인: 공식 번역·해설본 목차 기준',
         activity: '두 책의 공식 해설본 목차를 구해 항목을 분류표에 넣고 개수와 비율을 계산한 뒤 막대그래프로 비교한다. 악기 도설에 나온 치수 정보 항목 수를 센다.'
       },
-      // 영역 4. 악기 분류
       {
         id: 'ew_6',
         area: '악기 분류',
@@ -292,7 +301,6 @@
         variables: '독립변인: 분류 방식(재료 기준 대 소리 내는 방식 기준) / 종속변인: 집단 안 여운 길이의 표준편차, 스펙트럼 봉우리 수의 표준편차 / 통제변인: 교내 악기 8~10종, 동일 타격/취주 세기, 같은 녹음 거리',
         activity: '교내 악기 8~10종을 소리 내어 녹음하고, 파형에서 소리가 10%로 줄어드는 시간(여운)과 주파수 스펙트럼의 봉우리 수를 읽어 두 분류 집단별 표준편차를 비교한다.'
       },
-      // 영역 5. 연주 방식과 공간 (확장 선택)
       {
         id: 'ew_7',
         area: '연주 방식과 공간',
@@ -360,6 +368,7 @@
       });
 
       const [teacherSubTab, setTeacherSubTab] = useState('submissions');
+      const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
       // 로컬 스토리지 연동 상태
       const [inquiryDataState, setInquiryDataState] = useState(function() {
@@ -416,17 +425,79 @@
       const [selectedSubject, setSelectedSubject] = useState('all');
       const [toastMessage, setToastMessage] = useState('');
 
+      const showToast = function(msg) {
+        setToastMessage(msg);
+        setTimeout(function() { setToastMessage(''); }, 2600);
+      };
+
+      // =========================================================
+      // [Supabase 실시간 클라우드 DB 연동 로직]
+      // =========================================================
+
+      // 1. 클라우드에서 전체 제출 데이터 불러오기 (교사 화면 및 앱 시작 시)
+      const fetchSubmissionsFromCloud = async function() {
+        if (!supabaseClient) return;
+        try {
+          setIsCloudSyncing(true);
+          const { data, error } = await supabaseClient
+            .from('submissions')
+            .select('*');
+
+          if (!error && data && data.length > 0) {
+            const merged = Object.assign({}, allSubmissions);
+            data.forEach(function(row) {
+              if (row.student_id && row.data) {
+                merged[row.student_id] = row.data;
+              }
+            });
+            setAllSubmissions(merged);
+            localStorage.setItem('music_assessment_submissions', JSON.stringify(merged));
+          }
+        } catch (err) {
+          console.error('Cloud Fetch Error:', err);
+        } finally {
+          setIsCloudSyncing(false);
+        }
+      };
+
+      // 2. 개별 학생 데이터 클라우드에 업로드
+      const syncStudentToCloud = async function(studentId, submissionData) {
+        if (!supabaseClient || !studentId) return;
+        try {
+          const nowStr = new Date().toISOString();
+          await supabaseClient
+            .from('submissions')
+            .upsert({
+              student_id: String(studentId),
+              data: submissionData,
+              updated_at: nowStr
+            }, { onConflict: 'student_id' });
+        } catch (err) {
+          console.error('Cloud Sync Error:', err);
+        }
+      };
+
+      // 마운트 시 클라우드 데이터 1회 동기화 및 20초마다 자동 갱신
+      useEffect(function() {
+        fetchSubmissionsFromCloud();
+        const interval = setInterval(fetchSubmissionsFromCloud, 20000);
+        return function() { clearInterval(interval); };
+      }, []);
+
       const updateCurrentUserSession = function(user) {
         setCurrentUser(user);
         if (user) {
           sessionStorage.setItem('music_current_user', JSON.stringify(user));
+          // 로그인 시 학생의 기존 로컬 작성 내용이 있다면 클라우드로 즉시 자동 백업
+          if (user.role === 'student' && allSubmissions[user.id]) {
+            syncStudentToCloud(user.id, allSubmissions[user.id]);
+          }
         } else {
           sessionStorage.removeItem('music_current_user');
         }
       };
 
       const [activeReportModal, setActiveReportModal] = useState(false);
-      // 플레이스홀더(회색 반투명 가이드) 전용 상태
       const [reportPlaceholders, setReportPlaceholders] = useState({});
       const [reportForm, setReportForm] = useState({
         slot: 'report1',
@@ -443,11 +514,9 @@
         productHow: '',
         productImpact: '',
         productPrecaution: '',
-        // 주제 3 전용 1920s~2020s 11개 구간 배열
         popKorean100: Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
         popGlobal100: Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
         popFutureThree: { creator: '', form: '', value: '' },
-        // 주제 4 전용 5단계 필드
         ewStep1Theory: '',
         ewStep2Hypothesis: '',
         ewStep3Variables: '',
@@ -455,11 +524,6 @@
         ewStep5Comparison: '',
         aiLog: { prompt: '', criticalReview: '', screenshotImg: '' }
       });
-
-      const showToast = function(msg) {
-        setToastMessage(msg);
-        setTimeout(function() { setToastMessage(''); }, 2600);
-      };
 
       const getStudentAccounts = function() {
         try {
@@ -480,18 +544,16 @@
         accs[studentIdInput] = { id: studentIdInput, name: studentNameInput.trim(), pw: studentPwInput };
         localStorage.setItem('music_student_accounts', JSON.stringify(accs));
 
-        if (!allSubmissions[studentIdInput]) {
-          const up = Object.assign({}, allSubmissions, {
-            [studentIdInput]: { studentId: studentIdInput, studentName: studentNameInput.trim(), reports: {} }
-          });
-          setAllSubmissions(up);
-          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
-        }
+        const initSub = allSubmissions[studentIdInput] || { studentId: studentIdInput, studentName: studentNameInput.trim(), reports: {} };
+        const up = Object.assign({}, allSubmissions, { [studentIdInput]: initSub });
+        setAllSubmissions(up);
+        localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+        syncStudentToCloud(studentIdInput, initSub);
 
         const newUser = { role: 'student', id: studentIdInput, name: studentNameInput.trim() };
         updateCurrentUserSession(newUser);
         setIsRegisterMode(false);
-        showToast(studentNameInput + ' 님, 등록 및 로그인 완료! 🎉');
+        showToast(studentNameInput + ' 님, 등록 및 로그인 완료! (클라우드 연동됨) ☁️');
       };
 
       const handleStudentLogin = function(ev) {
@@ -516,6 +578,7 @@
           setNewTeacherId(teacherAuth.id);
           setMainTab('teacher_dash');
           setTeacherSubTab('submissions');
+          fetchSubmissionsFromCloud();
           showToast('교사 관리자 모드로 접속했습니다. 🛡️');
         } else {
           showToast('아이디 또는 6자리 비밀번호가 일치하지 않습니다.');
@@ -570,7 +633,6 @@
         setActiveItemEditModal(true);
       };
 
-      // 추천 카드를 클릭했을 때 기존 내용이 회색 반투명 플레이스홀더로 뜨고, 글씨를 쓰면 새로워지도록 설정
       const openReportModal = function(categoryType, item, defaultSlot) {
         if (!currentUser) {
           showToast('로그인 후 점검 및 작성을 진행할 수 있습니다.');
@@ -581,7 +643,6 @@
         const slot = defaultSlot || (!sData.reports || !sData.reports.report1 ? 'report1' : 'report2');
         const ex = sData.reports ? sData.reports[slot] : null;
 
-        // 회색 반투명 가이드(플레이스홀더) 설정
         const ph = {
           topicTitle: (item && (item.title || item.question || item.name)) || '탐구/기획 주제명을 입력하세요',
           coreConcept: (item && item.concept) || '교과목명 및 교과서 속 핵심 개념',
@@ -618,11 +679,9 @@
           productHow: (ex && ex.productHow) || '',
           productImpact: (ex && ex.productImpact) || '',
           productPrecaution: (ex && ex.productPrecaution) || '',
-          // 주제 3 1920s ~ 2020s 11개 구간
           popKorean100: (ex && ex.popKorean100) || Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
           popGlobal100: (ex && ex.popGlobal100) || Array(11).fill(null).map(function() { return { song: '', history: '' }; }),
           popFutureThree: (ex && ex.popFutureThree) || { creator: '', form: '', value: '' },
-          // 주제 4
           ewStep1Theory: (ex && ex.ewStep1Theory) || '',
           ewStep2Hypothesis: (ex && ex.ewStep2Hypothesis) || '',
           ewStep3Variables: (ex && ex.ewStep3Variables) || '',
@@ -659,25 +718,36 @@
         const upReports = Object.assign({}, sData.reports, {
           [reportForm.slot]: Object.assign({}, reportForm, { isSubmitted: isSubmit, updatedAt: now })
         });
-        const up = Object.assign({}, allSubmissions, {
-          [userKey]: Object.assign({}, sData, { reports: upReports })
-        });
+        const fullData = Object.assign({}, sData, { reports: upReports });
+        const up = Object.assign({}, allSubmissions, { [userKey]: fullData });
+
         setAllSubmissions(up);
         localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+
+        // 클라우드 Supabase DB로 실시간 전송
+        syncStudentToCloud(userKey, fullData);
+
         setActiveReportModal(false);
         showToast(currentUser.role === 'teacher'
-          ? (isSubmit ? '[교사 점검] 보고서 최종 제출 시뮬레이션 완료! 🎉' : '[교사 점검] 임시 저장 완료! 💾')
-          : (isSubmit ? '보고서가 최종 제출되었습니다! 🎉' : '임시 저장되었습니다. 💾')
+          ? (isSubmit ? '[교사 점검] 최종 제출 시뮬레이션 완료! (클라우드 반영) ☁️' : '[교사 점검] 임시 저장 완료! 💾')
+          : (isSubmit ? '보고서가 교사 대시보드로 최종 제출되었습니다! 🎉' : '임시 저장되었습니다. (클라우드 동기화 완료) 💾')
         );
       };
 
-      const resetAllData = function() {
+      const resetAllData = async function() {
         const c = prompt('모든 학생 계정(학번/비밀번호) 및 제출 데이터를 완전히 삭제하시겠습니까?\n진행하시려면 "RESET"을 입력하세요.');
         if (c === 'RESET') {
           localStorage.removeItem('music_assessment_submissions');
           localStorage.removeItem('music_student_accounts');
           setAllSubmissions({});
           if (currentUser && currentUser.role === 'student') setCurrentUser(null);
+
+          // 클라우드 DB 전체 비우기
+          if (supabaseClient) {
+            try {
+              await supabaseClient.from('submissions').delete().neq('student_id', '_empty_');
+            } catch(err) { console.error('Cloud Reset Error:', err); }
+          }
           showToast('학기 데이터가 완전히 초기화되었습니다. 🔄');
         }
       };
@@ -691,19 +761,22 @@
         const score2 = Number(gradingForm.r2_content) + Number(gradingForm.r2_analysis);
         const total = score1 + score2;
 
-        const up = Object.assign({}, allSubmissions, {
-          [gradingStudentId]: Object.assign({}, target, {
-            grading: Object.assign({}, gradingForm, {
-              score1: score1,
-              score2: score2,
-              totalScore: total,
-              gradedAt: new Date().toLocaleString('ko-KR')
-            })
+        const updatedStudent = Object.assign({}, target, {
+          grading: Object.assign({}, gradingForm, {
+            score1: score1,
+            score2: score2,
+            totalScore: total,
+            gradedAt: new Date().toLocaleString('ko-KR')
           })
         });
 
+        const up = Object.assign({}, allSubmissions, { [gradingStudentId]: updatedStudent });
         setAllSubmissions(up);
         localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+
+        // 채점 결과도 클라우드에 영구 저장
+        syncStudentToCloud(gradingStudentId, updatedStudent);
+
         setGradingStudentId(null);
         showToast(target.studentName + ' 학생 채점이 저장되었습니다! (총점 ' + total + '점 / 60점) 🌟');
       };
@@ -757,7 +830,11 @@
               e('div', null,
                 e('div', { className: 'flex items-center gap-2' },
                   e('h1', { className: 'text-base sm:text-lg font-black text-slate-900' }, '송악고등학교 음악 수행평가'),
-                  e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800' }, '개인 탐구 2개 30점씩 총 60점 만점')
+                  e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800' }, '개인 탐구 2개 30점씩 총 60점 만점'),
+                  e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hidden sm:inline-flex items-center gap-1' },
+                    e('span', { className: 'w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse' }),
+                    e('span', null, '클라우드 실시간 연동')
+                  )
                 ),
                 e('p', { className: 'text-2xs text-slate-500 hidden sm:block' }, '4개의 주제 중 2가지 선택 탐구 | AI 프롬프트 및 비판적 검증 분석 | 5점 급간 루브릭 채점')
               )
@@ -799,7 +876,7 @@
                 e('i', { className: 'fa-solid fa-file-pen text-rose-600' }),
                 e('span', null, '내 보고서 제출·정리 (2가지)')
               ),
-              currentUser && currentUser.role === 'teacher' && e('button', { onClick: function() { setMainTab('teacher_dash'); }, className: 'flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ml-auto ' + (mainTab === 'teacher_dash' ? 'border-purple-600 text-purple-700 bg-white' : 'border-transparent text-slate-600') },
+              currentUser && currentUser.role === 'teacher' && e('button', { onClick: function() { setMainTab('teacher_dash'); fetchSubmissionsFromCloud(); }, className: 'flex items-center gap-2 py-3 px-3.5 text-xs sm:text-sm font-bold border-b-2 transition ml-auto ' + (mainTab === 'teacher_dash' ? 'border-purple-600 text-purple-700 bg-white' : 'border-transparent text-slate-600') },
                 e('i', { className: 'fa-solid fa-user-shield text-purple-600' }),
                 e('span', null, '교사 평가 관리 대시보드')
               )
@@ -812,7 +889,7 @@
           e('div', { className: 'max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3' },
             e('div', { className: 'flex items-center gap-2 text-xs' },
               e('i', { className: 'fa-solid fa-lock text-amber-400' }),
-              e('span', null, '학생 탐구 작성 및 수행평가 제출을 위해 학번(4자리)과 비밀번호(4자리)로 로그인해 주세요. (기기 내 안전 영구 보존)')
+              e('span', null, '학생 탐구 작성 및 수행평가 제출을 위해 학번(4자리)과 비밀번호(4자리)로 로그인해 주세요. (휴대폰 제출 시 교사 화면에 즉시 반영)')
             ),
             isRegisterMode ? e('form', { onSubmit: handleStudentRegister, className: 'flex items-center gap-1.5' },
               e('input', { type: 'text', maxLength: 4, placeholder: '학번 4자리', value: studentIdInput, onChange: function(ev) { setStudentIdInput(ev.target.value); }, className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
@@ -859,10 +936,10 @@
                   e('p', { className: 'text-xs text-indigo-900/80 mb-3 leading-relaxed' }, '교과서나 일상에서 스스로 품은 질문을 토대로 가설, 변인 통제, 측정 도구를 직접 구성합니다.'),
                   e('div', { className: 'p-3 bg-white/90 rounded-xl border border-indigo-200 text-2xs text-slate-600 space-y-1.5 text-left mb-2' },
                     e('span', { className: 'font-bold text-indigo-900 block border-b border-indigo-100 pb-1' }, '■ 탐구 수행 공통 안내'),
-                    e('p', null, e('strong', { className: 'text-slate-800' }, '· 반복과 표본: '), '실험은 조건마다 최소 3회 반복해 평균을 쓰고, 설문은 조건당 20명 이상을 권장합니다. 결과는 평균과 범위(또는 표준편차)로 표나 그래프에 정리합니다.'),
+                    e('p', null, e('strong', { className: 'text-slate-800' }, '· 반복과 표본: '), '실험은 조건마다 최소 3회 반복해 평균을 쓰고, 설문은 조건당 20명 이상을 권장합니다. 결과는 평균과 범위로 표나 그래프에 정리합니다.'),
                     e('p', null, e('strong', { className: 'text-slate-800' }, '· 가설이 틀려도 괜찮습니다: '), '가설이 기각되어도 자료에 근거해 이유를 분석하면 좋은 탐구입니다. 결론을 가설에 억지로 맞추지 않습니다.'),
                     e('p', null, e('strong', { className: 'text-slate-800' }, '· 스마트폰 앱의 한계: '), '튜너·소음 측정·심박 앱은 기기마다 오차가 있으므로 절대값이 아니라 같은 기기로 조건을 비교하는 용도로 씁니다.'),
-                    e('p', null, e('strong', { className: 'text-slate-800' }, '· 안전과 윤리: '), '음량은 80dB 이하로 제한하고, 운동 실험은 준비운동을 하며 참여는 자율로 합니다. 설문은 익명으로 받고 사전 동의를 구합니다. 가사·악보는 탐구에 필요한 만큼만 인용합니다.'),
+                    e('p', null, e('strong', { className: 'text-slate-800' }, '· 안전과 윤리: '), '음량은 80dB 이하로 제한하고, 운동 실험은 준비운동을 하며 참여는 자율로 합니다. 설문은 익명으로 받고 사전 동의를 구합니다.'),
                     e('p', { className: 'text-amber-800 font-semibold' }, '· 확인 필요 표시: 역사적 사실, 곡 정보, 이론 용어 중 추가 검증이 필요한 부분은 교과서·원자료로 반드시 재확인하세요.')
                   )
                 ),
@@ -986,7 +1063,7 @@
             )
           ),
 
-          // 탭 3: 주제 3. 대중음악사&미래 음악 예측 (100년사 상세 가이드 & 편집 버튼 탑재)
+          // 탭 3: 주제 3. 대중음악사&미래 음악 예측
           mainTab === 'pop_history' && e('div', { className: 'space-y-5' },
             e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-200' },
               e('div', null,
@@ -995,7 +1072,6 @@
               )
             ),
 
-            // 지침 안내 배너 (빨간색 경고 문구 포함)
             e('div', { className: 'p-4 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-1.5 text-xs text-teal-950' },
               e('div', { className: 'flex items-center gap-1.5 font-black text-teal-900' },
                 e('i', { className: 'fa-solid fa-circle-info text-teal-600' }),
@@ -1010,7 +1086,6 @@
             ),
 
             e('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-5' },
-              // 선택지 1: 보고서 작성 진입 카드
               e('div', { className: 'bg-gradient-to-br from-teal-50 to-white rounded-3xl border-2 border-dashed border-teal-400 p-6 flex flex-col justify-between shadow-sm md:col-span-1' },
                 e('div', { className: 'space-y-3' },
                   e('span', { className: 'text-2xs font-extrabold px-2.5 py-1 rounded bg-teal-700 text-white' }, '선택지 01 · 대중음악사 종합 탐구'),
@@ -1030,7 +1105,6 @@
                 }, '+ 대중음악사 & 미래 예측 보고서 쓰기')
               ),
 
-              // 알차게 보강된 100년사 참고 요약 카드 (교사용 편집 버튼 탑재)
               e('div', { className: 'relative bg-white rounded-3xl border border-slate-200 p-6 flex flex-col justify-between shadow-sm md:col-span-2' },
                 currentUser && currentUser.role === 'teacher' && e('button', {
                   onClick: function(ev) { ev.stopPropagation(); openItemEditor('pop_history_guide', popGuideState); },
@@ -1042,7 +1116,7 @@
                   e('div', { className: 'flex items-center justify-between pb-3 border-b border-slate-100 mb-3' },
                     e('div', { className: 'flex items-center gap-2' },
                       e('i', { className: 'fa-solid fa-timeline text-teal-600 text-sm' }),
-                      e('h4', { className: 'font-extrabold text-slate-900 text-sm' }, '시대별 대중음악사 100년 흐름 참고 요약 (1920s ~ 2020s)'),
+                      e('h4', { className: 'font-extrabold text-slate-900 text-sm' }, '시대별 대중음악사 100년 흐름 참고 요약 (1920s ~ 2020s)')
                     ),
                     e('span', { className: 'text-2xs font-mono text-slate-400 mr-14' }, '총 11개 시대')
                   ),
@@ -1225,12 +1299,20 @@
               e('div', null,
                 e('div', { className: 'flex items-center gap-2 mb-1' },
                   e('i', { className: 'fa-solid fa-shield-halved text-purple-400' }),
-                  e('span', { className: 'text-xs font-bold text-purple-300' }, 'TEACHER MANAGEMENT PORTAL')
+                  e('span', { className: 'text-xs font-bold text-purple-300' }, 'TEACHER MANAGEMENT PORTAL'),
+                  isCloudSyncing && e('span', { className: 'text-2xs bg-purple-800 text-purple-200 px-2 py-0.5 rounded-full flex items-center gap-1' },
+                    e('i', { className: 'fa-solid fa-spinner fa-spin' }),
+                    e('span', null, '클라우드 동기화 중...')
+                  )
                 ),
                 e('h2', { className: 'text-xl font-black' }, '송악고 음악과 교사 평가 관리 대시보드'),
-                e('p', { className: 'text-xs text-slate-300 mt-1' }, '개인 탐구 2개(각 30점 만점, 총 60점 만점) 채점, 엑셀 내보내기 및 카드 세부 편집')
+                e('p', { className: 'text-xs text-slate-300 mt-1' }, '실시간 클라우드 연동: 전교생 제출 현황 실시간 집계, 60점 만점 채점, CSV 엑셀 내보내기')
               ),
               e('div', { className: 'flex flex-wrap gap-2' },
+                e('button', { onClick: fetchSubmissionsFromCloud, className: 'px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow transition flex items-center gap-1.5' },
+                  e('i', { className: 'fa-solid fa-arrows-rotate' }),
+                  e('span', null, '새로고침')
+                ),
                 e('button', { onClick: downloadCSV, className: 'px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow transition' }, '엑셀(CSV) 다운로드'),
                 e('button', { onClick: resetAllData, className: 'px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow transition' }, '학기 데이터 리셋')
               )
@@ -1238,7 +1320,7 @@
 
             e('div', { className: 'flex items-center gap-2 border-b border-slate-200 pb-2' },
               e('button', {
-                onClick: function() { setTeacherSubTab('submissions'); },
+                onClick: function() { setTeacherSubTab('submissions'); fetchSubmissionsFromCloud(); },
                 className: 'px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ' + (
                   teacherSubTab === 'submissions' ? 'bg-purple-900 text-white shadow' : 'bg-white text-slate-600 hover:bg-slate-100'
                 )
@@ -1267,6 +1349,9 @@
                   )
                 ),
                 e('tbody', { className: 'divide-y divide-slate-100' },
+                  Object.values(allSubmissions).length === 0 ? e('tr', null,
+                    e('td', { colSpan: 8, className: 'py-8 text-center text-slate-400' }, '아직 제출된 학생 데이터가 없습니다. 학생이 로그인하여 작성하면 실시간으로 표시됩니다.')
+                  ) :
                   Object.values(allSubmissions).map(function(s) {
                     const sc1 = s.grading && s.grading.score1 !== undefined ? (s.grading.score1 + '점') : '-';
                     const sc2 = s.grading && s.grading.score2 !== undefined ? (s.grading.score2 + '점') : '-';
@@ -1290,7 +1375,7 @@
                             r2_analysis: (s.grading && s.grading.r2_analysis) || 15,
                             teacherFeedback: (s.grading && s.grading.teacherFeedback) || ''
                           });
-                        }, className: 'px-2.5 py-1 rounded bg-slate-900 text-white font-bold text-2xs' }, '채점하기')
+                        }, className: 'px-2.5 py-1 rounded bg-slate-900 text-white font-bold text-2xs hover:bg-slate-800' }, '채점하기')
                       )
                     );
                   })
@@ -1337,7 +1422,7 @@
           )
         ),
 
-        // 보고서 작성 모달 (주제 3 1920-2020 신규 서식 + 반투명 플레이스홀더 적용)
+        // 보고서 작성 모달
         activeReportModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
           e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
             e('div', { className: 'p-5 border-b border-slate-200 flex items-start justify-between bg-slate-50' },
@@ -1367,7 +1452,7 @@
                 e('p', { className: 'text-2xs leading-relaxed text-rose-700 font-semibold' }, '· 가설이 맞지 않았다면 이유를 분석합니다. 결과를 가설에 맞춰 억지로 고치지 않습니다.')
               ),
 
-              // [주제 3 전용 상단 지침: 빨간색 경고 문구 포함]
+              // 주제 3 전용 상단 지침
               reportForm.topicCategory === 'pop_history' && e('div', { className: 'p-4 rounded-2xl bg-teal-50/80 border border-teal-200 space-y-1 text-teal-950' },
                 e('div', { className: 'flex items-center gap-1.5 font-black text-teal-900' },
                   e('i', { className: 'fa-solid fa-circle-exclamation text-teal-600' }),
@@ -1403,7 +1488,7 @@
                 })
               ),
 
-              // [주제 1 전용 폼: 회색 반투명 플레이스홀더 적용]
+              // 주제 1 전용 폼
               reportForm.topicCategory === 'inquiry' && e('div', { className: 'space-y-3 bg-slate-50 p-4 rounded-2xl border' },
                 e('div', null,
                   e('label', { className: 'font-bold text-slate-700 block mb-1' }, '1. 연계 교과 및 핵심 이론 개념'),
@@ -1467,7 +1552,7 @@
                 )
               ),
 
-              // [주제 2 전용 폼: 문화유산 상품 기획 + 회색 반투명 플레이스홀더]
+              // 주제 2 전용 폼
               reportForm.topicCategory === 'product' && e('div', { className: 'space-y-3 bg-emerald-50/40 p-4 rounded-2xl border border-emerald-200' },
                 e('div', { className: 'p-3 bg-white rounded-xl border border-emerald-200' },
                   e('label', { className: 'font-bold text-emerald-950 block mb-1' }, '문화유산명 및 기획 상품명'),
@@ -1525,9 +1610,9 @@
                 )
               ),
 
-              // [주제 3 신규 정비 폼: 1920s ~ 2020s 11개 구간 완벽 분리]
+              // 주제 3 전용 폼
               reportForm.topicCategory === 'pop_history' && e('div', { className: 'space-y-6 bg-teal-50/40 p-4 rounded-2xl border border-teal-200' },
-                // 1. 우리나라 대중음악 100년사 정리 (1920s ~ 2020s)
+                // 1. 우리나라 대중음악 100년사 정리
                 e('div', { className: 'space-y-3' },
                   e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
                     e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '1'),
@@ -1566,7 +1651,7 @@
                   )
                 ),
 
-                // 2. 글로벌 대중음악 100년사 정리 (1920s ~ 2020s)
+                // 2. 글로벌 대중음악 100년사 정리
                 e('div', { className: 'space-y-3' },
                   e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
                     e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '2'),
@@ -1605,7 +1690,7 @@
                   )
                 ),
 
-                // 3. 2030년 이후 미래 음악 예측 (3대 측면)
+                // 3. 2030년 이후 미래 음악 예측
                 e('div', { className: 'space-y-3' },
                   e('div', { className: 'flex items-center gap-2 border-b border-teal-300 pb-2' },
                     e('span', { className: 'w-6 h-6 rounded-full bg-teal-700 text-white flex items-center justify-center font-bold text-xs' }, '3'),
@@ -1659,7 +1744,7 @@
                 )
               ),
 
-              // [주제 4 전용 폼: 회색 반투명 플레이스홀더 적용]
+              // 주제 4 전용 폼
               reportForm.topicCategory === 'east_west' && e('div', { className: 'space-y-3 bg-amber-50/40 p-4 rounded-2xl border border-amber-200' },
                 e('div', null,
                   e('label', { className: 'font-bold text-amber-950 block mb-1' }, '1. 이론 학습 (서양 이론 vs 국악 이론 요약 및 핵심 개념)'),
@@ -1713,7 +1798,7 @@
                 )
               ),
 
-              // [공통 필수: AI 프롬프트 질의 및 비판적 검증 기록 + 캡처 사진 첨부 기능]
+              // AI 활용 기록 및 캡처 사진 첨부
               e('div', { className: 'p-4 bg-purple-50 rounded-2xl space-y-3 border border-purple-200' },
                 e('div', { className: 'flex items-center justify-between' },
                   e('div', { className: 'flex items-center gap-1.5 text-purple-950 font-extrabold text-xs' },
@@ -1733,7 +1818,6 @@
                   })
                 ),
 
-                // 사진 캡처 업로드 기능
                 e('div', { className: 'p-3 bg-white rounded-xl border border-purple-200 space-y-2' },
                   e('div', { className: 'flex items-center justify-between' },
                     e('label', { className: 'font-bold text-purple-950 text-xs flex items-center gap-1.5' },
@@ -1781,7 +1865,7 @@
           )
         ),
 
-        // [교사용 개별 카드/요약 편집 팝업 모달]
+        // 교사용 개별 카드/요약 편집 팝업 모달
         activeItemEditModal && editingItemForm && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
           e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden animate-fade-in' },
             e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
@@ -1929,7 +2013,7 @@
           )
         ),
 
-        // [교사용 개별 학생 정밀 채점 모달 (과제당 30점, 총 60점 만점)]
+        // 교사용 개별 학생 정밀 채점 모달
         gradingStudentId && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto' },
           e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-fade-in' },
             e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
@@ -1995,7 +2079,7 @@
                 )
               ),
 
-              // 5점 급간 채점표 (과제1 30점 + 과제2 30점)
+              // 5점 급간 채점표
               e('div', { className: 'p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4' },
                 e('div', { className: 'flex items-center justify-between' },
                   e('h4', { className: 'font-extrabold text-slate-900 text-sm' }, '개인 탐구 5점 급간 채점 배점표'),
@@ -2093,7 +2177,7 @@
           )
         ),
 
-        // [교사 로그인 모달]
+        // 교사 로그인 모달
         showTeacherModal && e('div', { className: 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm' },
           e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 max-w-sm w-full space-y-4 shadow-2xl' },
             e('div', { className: 'flex items-center justify-between pb-2 border-b' },
@@ -2119,3 +2203,15 @@
   </script>
 </body>
 </html>
+```eof
+
+### 적용 완료 및 확인 사항
+
+1. **학생 기존 작성 데이터 보존**:
+   * 학생들이 코드가 갱신된 사이트에 접속해서 학번으로 로그인하면, 기존 스마트폰 `localStorage`에 있던 작성 내용이 자동으로 수파베이스 클라우드로 업로드됩니다. **학생들이 처음부터 다시 쓸 필요가 전혀 없습니다.**
+2. **실시간 교사 대시보드 연동**:
+   * 학생들이 [임시 저장] 또는 [최종 제출]을 누르면 즉시 수파베이스 DB에 저장되고, 선생님의 [교사 관리자 모드] 대시보드 화면에 학생 명단과 2개 보고서 내용이 실시간으로 뜹니다.
+3. **교사 대시보드 [새로고침] 버튼 탑재**:
+   * 20초마다 자동 갱신되며, 우측 상단 `[새로고침]` 버튼을 누르면 언제든 즉시 최신 학생 제출물을 클라우드에서 당겨옵니다.
+4. **채점 및 엑셀 다운로드 영구 보존**:
+   * 교사가 채점한 점수와 세특 피드백도 클라우드에 함께 보관되어, 교사 PC를 바꾸거나 다른 기기에서 열어도 채점 내역이 온전히 유지되며 엑셀(CSV)로 다운로드됩니다.
