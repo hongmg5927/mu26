@@ -42,10 +42,30 @@
     let supabaseClient = null;
     try {
       if (window.supabase) {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // 이 포털은 Supabase 로그인 기능을 쓰지 않으므로 세션 저장·자동 갱신·브라우저 잠금을 모두 끔
+        // (기본값으로 켜 두면 세션 확인 단계에서 요청이 나가지 않고 멈추는 문제가 있었음)
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+            storageKey: 'mu26-portal-no-auth',
+            lock: async function(name, acquireTimeout, fn) { return await fn(); }
+          }
+        });
       }
     } catch (err) {
       console.error('Supabase Init Error:', err);
+    }
+
+    // 클라우드 응답이 없을 때 무한정 기다리지 않도록 시간 제한 (기본 10초)
+    function withTimeout(promise, ms) {
+      return Promise.race([
+        promise,
+        new Promise(function(_, reject) {
+          setTimeout(function() { reject(new Error('TIMEOUT')); }, ms || 10000);
+        })
+      ]);
     }
 
     // --- 음표 SVG 아이콘 ---
@@ -635,6 +655,7 @@
       const [studentPwInput, setStudentPwInput] = useState('');
       const [studentNameInput, setStudentNameInput] = useState('');
       const [isRegisterMode, setIsRegisterMode] = useState(false);
+      const [authBusy, setAuthBusy] = useState(false);
 
       const [showTeacherModal, setShowTeacherModal] = useState(false);
       const [teacherIdInput, setTeacherIdInput] = useState('');
@@ -713,9 +734,9 @@
       const [editingStudentTargetId, setEditingStudentTargetId] = useState(null);
       const [editingStudentForm, setEditingStudentForm] = useState({ id: '', name: '' });
       
-      const showToast = function(msg) {
+      const showToast = function(msg, ms) {
         setToastMessage(msg);
-        setTimeout(function() { setToastMessage(''); }, 2600);
+        setTimeout(function() { setToastMessage(''); }, ms || 2600);
       };
 
       // =========================================================
@@ -869,7 +890,17 @@
       const ACCOUNT_STORE_ERROR = '학생 계정 저장소(students 표)에 연결할 수 없습니다. 잠시 후 다시 시도하고, 계속되면 선생님께 알려 주세요.';
 
       const cloudGetAccount = function(id) {
-        return supabaseClient.from('students').select('*').eq('student_id', String(id)).maybeSingle();
+        return withTimeout(supabaseClient.from('students').select('*').eq('student_id', String(id)).maybeSingle());
+      };
+
+      // 오류 안내: 시간 초과인지, Supabase가 돌려준 오류인지 구분해서 보여 줌
+      const showAccountError = function(err) {
+        if (err && err.message === 'TIMEOUT') {
+          showToast('클라우드 응답이 없습니다(10초 초과). 인터넷 연결을 확인하고 다시 시도해 주세요.', 6000);
+          return;
+        }
+        const detail = err && (err.message || err.code) ? ' (' + (err.code ? err.code + ': ' : '') + (err.message || '') + ')' : '';
+        showToast(ACCOUNT_STORE_ERROR + detail, 7000);
       };
 
       // 이 기기에 남아 있는 해당 학생의 계정·보고서 사본 지우기
@@ -893,10 +924,10 @@
       const migrateLegacyAccount = async function(id) {
         const local = getStudentAccounts()[id];
         if (!local) return null;
-        const subRes = await supabaseClient.from('submissions').select('student_id').eq('student_id', String(id)).maybeSingle();
+        const subRes = await withTimeout(supabaseClient.from('submissions').select('student_id').eq('student_id', String(id)).maybeSingle());
         if (subRes.error || !subRes.data) return null;
         const acc = { student_id: String(id), name: local.name, pw: local.pw };
-        const ins = await supabaseClient.from('students').upsert(acc, { onConflict: 'student_id' });
+        const ins = await withTimeout(supabaseClient.from('students').upsert(acc, { onConflict: 'student_id' }));
         return ins.error ? null : acc;
       };
 
@@ -925,27 +956,31 @@
         if (!/^\d{4}$/.test(studentIdInput)) { showToast('학번은 4자리 숫자여야 합니다.'); return; }
         if (!studentNameInput.trim()) { showToast('성명을 입력해 주세요.'); return; }
         if (!/^\d{4}$/.test(studentPwInput)) { showToast('비밀번호는 4자리 숫자여야 합니다.'); return; }
-        if (!supabaseClient) { showToast(ACCOUNT_STORE_ERROR); return; }
+        if (!supabaseClient) { showToast(ACCOUNT_STORE_ERROR, 6000); return; }
+        if (authBusy) return;
 
         const id = studentIdInput;
         const name = studentNameInput.trim();
+        setAuthBusy(true);
         try {
           const accRes = await cloudGetAccount(id);
-          if (accRes.error) { showToast(ACCOUNT_STORE_ERROR); return; }
+          if (accRes.error) { showAccountError(accRes.error); return; }
           if (accRes.data) { showToast('이미 등록된 학번입니다. [로그인]으로 들어가 주세요.'); return; }
 
           // 계정은 없는데 보고서 기록만 있는 학번 = 예전 방식으로 다른 기기에서 가입한 학생
-          const subRes = await supabaseClient.from('submissions').select('student_id').eq('student_id', String(id)).maybeSingle();
+          const subRes = await withTimeout(supabaseClient.from('submissions').select('student_id').eq('student_id', String(id)).maybeSingle());
           if (subRes.data) {
             showToast('이미 기록이 있는 학번입니다. 처음 가입한 기기에서 로그인하거나 선생님께 문의하세요.');
             return;
           }
 
-          const ins = await supabaseClient.from('students').insert({ student_id: String(id), name: name, pw: studentPwInput });
-          if (ins.error) { showToast(ACCOUNT_STORE_ERROR); return; }
+          const ins = await withTimeout(supabaseClient.from('students').insert({ student_id: String(id), name: name, pw: studentPwInput }));
+          if (ins.error) { showAccountError(ins.error); return; }
         } catch (err) {
-          showToast(ACCOUNT_STORE_ERROR);
+          showAccountError(err);
           return;
+        } finally {
+          setAuthBusy(false);
         }
 
         // 삭제 후 같은 학번으로 다시 가입한 경우에도 이전 내용 없이 빈 상태로 시작
@@ -965,12 +1000,14 @@
 
       const handleStudentLogin = async function(ev) {
         ev.preventDefault();
-        if (!supabaseClient) { showToast(ACCOUNT_STORE_ERROR); return; }
+        if (!supabaseClient) { showToast(ACCOUNT_STORE_ERROR, 6000); return; }
+        if (authBusy) return;
         const id = studentIdInput;
         let acc = null;
+        setAuthBusy(true);
         try {
           const res = await cloudGetAccount(id);
-          if (res.error) { showToast(ACCOUNT_STORE_ERROR); return; }
+          if (res.error) { showAccountError(res.error); return; }
           acc = res.data;
           // 예전 방식 계정이면 이번 로그인 때 클라우드로 옮김 (비밀번호가 맞을 때만)
           if (!acc) {
@@ -978,8 +1015,10 @@
             if (local && local.pw === studentPwInput) acc = await migrateLegacyAccount(id);
           }
         } catch (err) {
-          showToast(ACCOUNT_STORE_ERROR);
+          showAccountError(err);
           return;
+        } finally {
+          setAuthBusy(false);
         }
 
         if (!acc) {
@@ -1372,7 +1411,7 @@
         if (supabaseClient) {
           try {
             const oldAcc = await cloudGetAccount(oldId);
-            if (oldAcc.error) { showToast(ACCOUNT_STORE_ERROR); return; }
+            if (oldAcc.error) { showAccountError(oldAcc.error); return; }
             if (oldAcc.data) currentPw = oldAcc.data.pw;
             if (oldId !== newId) {
               const dup = await cloudGetAccount(newId);
@@ -1382,7 +1421,7 @@
               }
             }
           } catch (err) {
-            showToast(ACCOUNT_STORE_ERROR);
+            showAccountError(err);
             return;
           }
         }
@@ -1585,12 +1624,12 @@
               e('input', { type: 'text', maxLength: 4, placeholder: '학번 4자리', value: studentIdInput, onChange: function(ev) { setStudentIdInput(ev.target.value); }, className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
               e('input', { type: 'text', placeholder: '성명', value: studentNameInput, onChange: function(ev) { setStudentNameInput(ev.target.value); }, className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
               e('input', { type: 'password', maxLength: 4, placeholder: '비번 4자리', value: studentPwInput, onChange: function(ev) { setStudentPwInput(ev.target.value); }, className: 'px-2 py-1 rounded text-xs text-slate-900 w-20', required: true }),
-              e('button', { type: 'submit', className: 'px-3 py-1 rounded bg-emerald-600 text-white font-bold text-xs' }, '등록 완료'),
+              e('button', { type: 'submit', disabled: authBusy, className: 'px-3 py-1 rounded bg-emerald-600 text-white font-bold text-xs ' + (authBusy ? 'opacity-60 cursor-wait' : '') }, authBusy ? '확인 중…' : '등록 완료'),
               e('button', { type: 'button', onClick: function() { setIsRegisterMode(false); }, className: 'text-2xs text-slate-300 underline ml-1' }, '로그인으로')
             ) : e('form', { onSubmit: handleStudentLogin, className: 'flex items-center gap-1.5' },
               e('input', { type: 'text', maxLength: 4, placeholder: '학번 4자리', value: studentIdInput, onChange: function(ev) { setStudentIdInput(ev.target.value); }, className: 'px-2 py-1 rounded text-xs text-slate-900 w-24', required: true }),
               e('input', { type: 'password', maxLength: 4, placeholder: '비밀번호 4자리', value: studentPwInput, onChange: function(ev) { setStudentPwInput(ev.target.value); }, className: 'px-2 py-1 rounded text-xs text-slate-900 w-24', required: true }),
-              e('button', { type: 'submit', className: 'px-3 py-1 rounded bg-indigo-600 text-white font-bold text-xs' }, '로그인'),
+              e('button', { type: 'submit', disabled: authBusy, className: 'px-3 py-1 rounded bg-indigo-600 text-white font-bold text-xs ' + (authBusy ? 'opacity-60 cursor-wait' : '') }, authBusy ? '확인 중…' : '로그인'),
               e('button', { type: 'button', onClick: function() { setIsRegisterMode(true); }, className: 'px-2 py-1 rounded bg-slate-800 text-amber-300 font-bold text-xs' }, '최초 등록하기')
             )
           )
