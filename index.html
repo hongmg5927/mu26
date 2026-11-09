@@ -449,14 +449,16 @@
             .select('*');
 
           if (!error && data && data.length > 0) {
-            const merged = Object.assign({}, allSubmissions);
-            data.forEach(function(row) {
-              if (row.student_id && row.data) {
-                merged[row.student_id] = row.data;
-              }
+            setAllSubmissions(function(prev) {
+              const merged = Object.assign({}, prev);
+              data.forEach(function(row) {
+                if (row.student_id && row.data) {
+                  merged[row.student_id] = row.data;
+                }
+              });
+              localStorage.setItem('music_assessment_submissions', JSON.stringify(merged));
+              return merged;
             });
-            setAllSubmissions(merged);
-            localStorage.setItem('music_assessment_submissions', JSON.stringify(merged));
           }
         } catch (err) {
           console.error('Cloud Fetch Error:', err);
@@ -1472,6 +1474,7 @@
                       e('td', { className: 'px-3 font-mono font-bold text-slate-700' }, sc2),
                       e('td', { className: 'px-3 font-mono font-black text-indigo-600' }, total),
                       e('td', { className: 'px-3 text-center' },
+                        e('div', { className: 'flex items-center justify-center gap-1.5' },
                         e('button', { onClick: function() {
                           setGradingStudentId(s.studentId);
                           setGradingForm({
@@ -2387,5 +2390,3 @@
   </script>
 </body>
 </html>
-
-
