@@ -89,6 +89,56 @@
 
     const SERVER_CHECK_MS = 8000;
 
+    // ---------------------------------------------------------
+    // [사진 분리] AI 캡처 사진은 보고서(submissions)와 따로 'report_images' 표에 저장
+    //   보고서에는 사진 대신 hasScreenshot(사진 있음)·screenshotRev(사진 버전)만 남김
+    //   → 목록·새로고침·실시간 전달 때 사진이 오가지 않아 전송량이 크게 줄어듦
+    // ---------------------------------------------------------
+    function splitImages(data) {
+      const out = JSON.parse(JSON.stringify(data || {}));
+      const images = [];
+      ['report1', 'report2'].forEach(function(slot) {
+        const rep = out.reports && out.reports[slot];
+        if (!rep || !rep.aiLog) return;
+        const ai = rep.aiLog;
+        if (ai.screenshotImg) {
+          const rev = ai.screenshotRev || Date.now();
+          images.push({ slot: slot, img: ai.screenshotImg, rev: rev });
+          ai.screenshotImg = '';
+          ai.hasScreenshot = true;
+          ai.screenshotRev = rev;
+        }
+      });
+      return { data: out, images: images };
+    }
+
+    // 클라우드에서 받은 보고서에 사진이 빠져 있으면, 이 기기에 같은 버전의 사진이 있을 때 그대로 살려 둠
+    function mergeKeepLocalImages(cloud, local) {
+      if (!cloud || !local || !cloud.reports || !local.reports) return cloud;
+      let out = cloud;
+      ['report1', 'report2'].forEach(function(slot) {
+        const c = cloud.reports[slot];
+        const l = local.reports[slot];
+        if (c && c.aiLog && c.aiLog.hasScreenshot && !c.aiLog.screenshotImg &&
+            l && l.aiLog && l.aiLog.screenshotImg && (l.aiLog.screenshotRev || 0) === (c.aiLog.screenshotRev || 0)) {
+          if (out === cloud) out = JSON.parse(JSON.stringify(cloud));
+          out.reports[slot].aiLog.screenshotImg = l.aiLog.screenshotImg;
+        }
+      });
+      return out;
+    }
+
+    // 이미 올린 사진 버전 기록 (같은 사진을 다시 올리지 않기 위함)
+    function getUploadedImages() {
+      try { const s = localStorage.getItem('music_uploaded_images'); return s ? JSON.parse(s) : {}; } catch (err) { return {}; }
+    }
+
+    // report_images 표가 아직 없을 때의 오류인지
+    function isMissingTable(err) {
+      if (!err) return false;
+      return err.code === '42P01' || err.code === 'PGRST205' || /report_images|does not exist|schema cache/i.test(String(err.message || ''));
+    }
+
     // 기기 저장 공간이 가득 차도 화면이 멈추지 않도록 (성공하면 true)
     function safeSetLocal(key, value) {
       try {
@@ -571,7 +621,7 @@
       } else if (cat === 'east_west') {
         vals = vals.concat([rep.ewStep1Theory, rep.ewStep2Hypothesis, rep.ewStep3Variables, rep.ewStep4Empirical, rep.ewStep5Comparison]);
       }
-      return vals.concat([ai.prompt, ai.screenshotImg, ai.criticalReview]);
+      return vals.concat([ai.prompt, ai.screenshotImg || ai.hasScreenshot, ai.criticalReview]);
     }
 
     function getReportProgress(rep) {
@@ -687,10 +737,23 @@
           F('AI에게 입력한 질문(프롬프트)', ai.prompt),
           e('div', { className: 'space-y-1' },
             e('p', { className: 'text-xs font-bold text-slate-800' }, 'AI와의 실제 대화 캡처 사진'),
-            ai.screenshotImg
-              ? e('div', { className: 'p-1 rounded-lg bg-white border border-purple-200 flex justify-center' },
-                  e('img', { src: ai.screenshotImg, alt: 'AI 대화 캡처', className: 'max-h-80 object-contain rounded' }))
-              : e('div', { className: 'p-2.5 rounded-lg border border-dashed border-rose-200 bg-rose-50/40 text-2xs text-rose-400' }, '첨부한 사진이 없습니다')
+            (function() {
+              const info = props.imageInfo || {};
+              const src = ai.screenshotImg || info.src;
+              if (src) {
+                return e('div', { className: 'p-1 rounded-lg bg-white border border-purple-200 flex justify-center' },
+                  e('img', { src: src, alt: 'AI 대화 캡처', className: 'max-h-80 object-contain rounded' }));
+              }
+              if (ai.hasScreenshot) {
+                const msg = info.status === 'offline' ? '서버가 연결되면 사진을 볼 수 있어요'
+                  : info.status === 'missing' ? '사진을 찾을 수 없습니다 (학생에게 다시 올려 달라고 해 주세요)'
+                  : '사진 불러오는 중…';
+                return e('div', { className: 'p-2.5 rounded-lg border border-dashed border-purple-200 bg-white text-2xs text-purple-500 flex items-center gap-1.5' },
+                  e('i', { className: 'fa-solid ' + (info.status === 'loading' || !info.status ? 'fa-spinner fa-spin' : 'fa-image') }),
+                  e('span', null, msg));
+              }
+              return e('div', { className: 'p-2.5 rounded-lg border border-dashed border-rose-200 bg-rose-50/40 text-2xs text-rose-400' }, '첨부한 사진이 없습니다');
+            })()
           ),
           F('학생의 비판적 검증 및 교정 내용', ai.criticalReview)
         )
@@ -740,6 +803,11 @@
         offlineRef.current = false;
         setServerStatus('online');
       };
+      // 사진 캐시: 키 = 학번:과제:버전 → { status: 'loading'|'ok'|'missing'|'offline', src }
+      const [imageCache, setImageCache] = useState({});
+      const imageCacheRef = useRef({});
+      const imagesTableMissingRef = useRef(false);
+
       const SERVER_DOWN_MSG = '서버 응답이 없어 지금은 할 수 없습니다. 서버가 돌아오면(상단 표시가 정상으로 바뀌면) 다시 시도해 주세요.';
 
       // 로컬 스토리지 연동 상태
@@ -834,7 +902,7 @@
               res.data.forEach(function(row) {
                 // 아직 전달하지 못한 내 보고서가 있으면 기기 쪽 내용을 지킴 (전달은 pushPendingForStudent가 담당)
                 if (row.student_id && row.data && pending.indexOf(String(row.student_id)) === -1) {
-                  merged[row.student_id] = row.data;
+                  merged[row.student_id] = mergeKeepLocalImages(row.data, prev[row.student_id]);
                 }
               });
               safeSetLocal('music_assessment_submissions', JSON.stringify(merged));
@@ -855,7 +923,7 @@
           const res = await withTimeout(supabaseClient.from('submissions').select('student_id, data').eq('student_id', String(id)).maybeSingle());
           if (!res.error && res.data && res.data.data) {
             setAllSubmissions(function(prev) {
-              const up = Object.assign({}, prev, { [id]: res.data.data });
+              const up = Object.assign({}, prev, { [id]: mergeKeepLocalImages(res.data.data, prev[id]) });
               safeSetLocal('music_assessment_submissions', JSON.stringify(up));
               return up;
             });
@@ -866,14 +934,54 @@
       };
 
       // 개별 학생 데이터 클라우드에 업로드 (성공하면 true)
+      //  사진은 report_images 표에 따로 올리고(바뀐 사진만), 보고서에는 사진을 뺀 내용만 저장
+      //  report_images 표가 아직 없으면 예전처럼 보고서 안에 사진을 함께 저장
       const syncStudentToCloud = async function(studentId, submissionData) {
         if (!cloudReady() || !studentId) return false;
         try {
+          let payload = submissionData;
+          if (!imagesTableMissingRef.current) {
+            const split = splitImages(submissionData);
+            const uploaded = getUploadedImages();
+            let tableMissing = false;
+            for (let i = 0; i < split.images.length; i++) {
+              const im = split.images[i];
+              const key = studentId + ':' + im.slot;
+              if (uploaded[key] === im.rev) continue;
+              const r = await withTimeout(supabaseClient.from('report_images').upsert({
+                student_id: String(studentId), slot: im.slot, img: im.img, updated_at: new Date().toISOString()
+              }, { onConflict: 'student_id,slot' }));
+              if (r.error) {
+                if (isNetworkFailure(r)) { markOffline(); return false; }
+                if (isMissingTable(r.error)) { tableMissing = true; break; }
+                console.error('Image Upload Error:', r.error);
+                return false;
+              }
+              uploaded[key] = im.rev;
+              safeSetLocal('music_uploaded_images', JSON.stringify(uploaded));
+            }
+            if (tableMissing) {
+              imagesTableMissingRef.current = true;
+            } else {
+              // 학생이 사진을 지운 과제는 서버의 사진도 지움
+              const slots = ['report1', 'report2'];
+              for (let j = 0; j < slots.length; j++) {
+                const rep = submissionData.reports && submissionData.reports[slots[j]];
+                const key2 = studentId + ':' + slots[j];
+                if (rep && rep.aiLog && rep.aiLog.hasScreenshot === false && uploaded[key2] !== undefined) {
+                  await withTimeout(supabaseClient.from('report_images').delete().eq('student_id', String(studentId)).eq('slot', slots[j]));
+                  delete uploaded[key2];
+                  safeSetLocal('music_uploaded_images', JSON.stringify(uploaded));
+                }
+              }
+              payload = split.data;
+            }
+          }
           const res = await withTimeout(supabaseClient
             .from('submissions')
             .upsert({
               student_id: String(studentId),
-              data: submissionData,
+              data: payload,
               updated_at: new Date().toISOString()
             }, { onConflict: 'student_id' }));
           if (res.error) {
@@ -886,6 +994,57 @@
           console.error('Cloud Sync Error:', err);
           if (isNetworkFailure(err)) markOffline();
           return false;
+        }
+      };
+
+      // 사진 한 장 불러오기 (보고서를 열었을 때만)
+      const requestImage = async function(studentId, slot, rev) {
+        const key = studentId + ':' + slot + ':' + (rev || 0);
+        if (imageCacheRef.current[key] && imageCacheRef.current[key].status !== 'offline') return;
+        const setEntry = function(entry) {
+          imageCacheRef.current = Object.assign({}, imageCacheRef.current, { [key]: entry });
+          setImageCache(imageCacheRef.current);
+        };
+        if (!cloudReady()) { setEntry({ status: 'offline' }); return; }
+        setEntry({ status: 'loading' });
+        try {
+          const res = await withTimeout(supabaseClient.from('report_images').select('img').eq('student_id', String(studentId)).eq('slot', slot).maybeSingle());
+          if (res.error) {
+            if (isNetworkFailure(res)) { markOffline(); setEntry({ status: 'offline' }); return; }
+            setEntry({ status: 'missing' });
+            return;
+          }
+          setEntry(res.data && res.data.img ? { status: 'ok', src: res.data.img } : { status: 'missing' });
+        } catch (err) {
+          if (isNetworkFailure(err)) markOffline();
+          setEntry({ status: 'offline' });
+        }
+      };
+
+      // 화면에 그릴 사진 정보 (보고서 안에 사진이 있으면 그것을, 없으면 캐시에서)
+      const resolveScreenshot = function(studentId, slot, aiLog) {
+        if (!aiLog) return {};
+        if (aiLog.screenshotImg) return { status: 'ok', src: aiLog.screenshotImg };
+        if (!aiLog.hasScreenshot) return {};
+        return imageCache[studentId + ':' + slot + ':' + (aiLog.screenshotRev || 0)] || { status: 'loading' };
+      };
+
+      // 학생 기기: 1분마다 내 채점 결과만 확인 (보고서 전체를 받지 않음)
+      const checkMyGrading = async function(u) {
+        if (!cloudReady() || !u || u.role !== 'student') return;
+        try {
+          const res = await withTimeout(supabaseClient.from('submissions').select('grading:data->grading').eq('student_id', String(u.id)).maybeSingle(), SERVER_CHECK_MS);
+          if (res.error || !res.data) return;
+          const g = res.data.grading || null;
+          setAllSubmissions(function(prev) {
+            const mine = prev[u.id];
+            if (!mine || JSON.stringify(mine.grading || null) === JSON.stringify(g)) return prev;
+            const up = Object.assign({}, prev, { [u.id]: Object.assign({}, mine, { grading: g || undefined }) });
+            safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+            return up;
+          });
+        } catch (err) {
+          if (isNetworkFailure(err)) markOffline();
         }
       };
 
@@ -958,6 +1117,7 @@
           if (!u) return;
           verifyStudentStillExists(u);
           if (needFullFetch) fetchSubmissionsFromCloud(u);
+          else checkMyGrading(u);
         };
         tick();
         const interval = setInterval(tick, 60000);
@@ -972,11 +1132,10 @@
         const isStudent = currentUser.role === 'student';
         let channel = null;
         try {
-          const subFilter = { event: '*', schema: 'public', table: 'submissions' };
-          if (isStudent) subFilter.filter = 'student_id=eq.' + currentUser.id;
-          channel = supabaseClient
-            .channel('live-' + liveKey)
-            .on('postgres_changes', subFilter, function(payload) {
+          // 학생 기기는 보고서 실시간을 받지 않음 (채점 결과는 1분 확인으로 받음 → 전송량 절약)
+          channel = supabaseClient.channel('live-' + liveKey);
+          if (!isStudent) channel = channel
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, function(payload) {
               if (payload.eventType === 'DELETE') {
                 const delId = payload.old && payload.old.student_id;
                 if (delId) {
@@ -994,7 +1153,7 @@
               if (!row.student_id) return;
               if (row.data) {
                 setAllSubmissions(function(prev) {
-                  const up = Object.assign({}, prev, { [row.student_id]: row.data });
+                  const up = Object.assign({}, prev, { [row.student_id]: mergeKeepLocalImages(row.data, prev[row.student_id]) });
                   safeSetLocal('music_assessment_submissions', JSON.stringify(up));
                   return up;
                 });
@@ -1016,6 +1175,7 @@
           if (channel) supabaseClient.removeChannel(channel);
         };
       }, [liveKey, serverStatus]);
+
 
       // [실시간] 학생 화면: 채점 결과가 새로 들어오면 알림 표시
       const lastGradedRef = useRef(null);
@@ -1445,7 +1605,7 @@
         setActiveReportModal(true);
       };
 
-      // AI 캡처 사진: 가로 최대 1280px JPEG로 줄여서 저장 (기기 저장 공간과 서버 부담을 줄임)
+      // AI 캡처 사진: 가로 최대 1100px, JPEG 품질 0.6으로 줄여서 저장 (약 100KB 안팎, 글씨는 충분히 읽힘)
       const handleImageUpload = function(ev) {
         const file = ev.target.files && ev.target.files[0];
         if (!file) return;
@@ -1455,7 +1615,7 @@
         }
         const applyImage = function(dataUrl) {
           setReportForm(function(prev) {
-            return Object.assign({}, prev, { aiLog: Object.assign({}, prev.aiLog, { screenshotImg: dataUrl }) });
+            return Object.assign({}, prev, { aiLog: Object.assign({}, prev.aiLog, { screenshotImg: dataUrl, hasScreenshot: true, screenshotRev: Date.now() }) });
           });
           showToast('AI 대화 캡처 사진이 정상 등록되었습니다! 📸');
         };
@@ -1465,7 +1625,7 @@
           const img = new Image();
           img.onload = function() {
             try {
-              const scale = Math.min(1, 1280 / img.width);
+              const scale = Math.min(1, 1100 / img.width);
               const canvas = document.createElement('canvas');
               canvas.width = Math.round(img.width * scale);
               canvas.height = Math.round(img.height * scale);
@@ -1473,7 +1633,7 @@
               ctx.fillStyle = '#ffffff';
               ctx.fillRect(0, 0, canvas.width, canvas.height);
               ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              applyImage(canvas.toDataURL('image/jpeg', 0.75));
+              applyImage(canvas.toDataURL('image/jpeg', 0.6));
             } catch (err) {
               if (file.size <= 2 * 1024 * 1024) applyImage(original);
               else showToast('사진을 처리하지 못했습니다. 2MB 이하의 PNG·JPG 사진으로 다시 올려 주세요.', 5000);
@@ -1493,8 +1653,11 @@
         const userName = currentUser.role === 'teacher' ? '교사(점검용)' : currentUser.name;
         const sData = allSubmissions[userKey] || { studentId: userKey, studentName: userName, reports: {} };
         const now = new Date().toLocaleString('ko-KR');
+        // 사진에 버전 번호가 없으면 붙여 둠 (같은 사진을 서버에 다시 올리지 않기 위함)
+        const formAi = Object.assign({}, reportForm.aiLog);
+        if (formAi.screenshotImg && !formAi.screenshotRev) { formAi.screenshotRev = Date.now(); formAi.hasScreenshot = true; }
         const upReports = Object.assign({}, sData.reports, {
-          [reportForm.slot]: Object.assign({}, reportForm, { isSubmitted: isSubmit, updatedAt: now })
+          [reportForm.slot]: Object.assign({}, reportForm, { aiLog: formAi, isSubmitted: isSubmit, updatedAt: now })
         });
         const fullData = Object.assign({}, sData, { reports: upReports });
 
@@ -1530,9 +1693,17 @@
         // 클라우드의 최신 채점 결과를 덮어쓰지 않도록 가져와 유지
         if (cloudReady()) {
           try {
-            const res = await withTimeout(supabaseClient.from('submissions').select('data').eq('student_id', String(userKey)).maybeSingle(), SERVER_CHECK_MS);
-            if (isNetworkFailure(res)) markOffline();
-            else if (res.data && res.data.data && res.data.data.grading) fullData.grading = res.data.data.grading;
+            const res = await withTimeout(supabaseClient.from('submissions').select('grading:data->grading').eq('student_id', String(userKey)).maybeSingle(), SERVER_CHECK_MS);
+            if (isNetworkFailure(res)) {
+              markOffline();
+            } else if (res.error) {
+              // 예비 경로: 채점 결과만 읽기가 실패하면 보고서 전체를 읽어서라도 채점 기록을 지킴
+              const res2 = await withTimeout(supabaseClient.from('submissions').select('data').eq('student_id', String(userKey)).maybeSingle(), SERVER_CHECK_MS);
+              if (isNetworkFailure(res2)) markOffline();
+              else if (res2.data && res2.data.data && res2.data.data.grading) fullData.grading = res2.data.data.grading;
+            } else if (res.data && res.data.grading) {
+              fullData.grading = res.data.grading;
+            }
           } catch (err) {
             if (isNetworkFailure(err)) markOffline();
           }
@@ -1566,6 +1737,7 @@
             try {
               await supabaseClient.from('submissions').delete().neq('student_id', '_empty_');
               await supabaseClient.from('students').delete().neq('student_id', '_empty_');
+              await supabaseClient.from('report_images').delete().neq('student_id', '_empty_');
             } catch(err) { console.error('Cloud Reset Error:', err); }
           }
           showToast('학기 데이터가 완전히 초기화되었습니다. 🔄');
@@ -1787,6 +1959,12 @@
             await supabaseClient.from('students').upsert({ student_id: String(newId), name: newName, pw: currentPw }, { onConflict: 'student_id' });
             await syncStudentToCloud(newId, updatedTarget);
             if (oldId !== newId) {
+              // 사진도 새 학번으로 옮김 (사진 표가 없거나 실패해도 나머지 정리는 계속 진행)
+              try {
+                await withTimeout(supabaseClient.from('report_images').update({ student_id: String(newId) }).eq('student_id', String(oldId)));
+              } catch (imgErr) {
+                console.error('Image Move Error:', imgErr);
+              }
               await supabaseClient.from('submissions').delete().eq('student_id', String(oldId));
               await supabaseClient.from('students').delete().eq('student_id', String(oldId));
             }
@@ -1832,6 +2010,11 @@
         if (supabaseClient) {
           try {
             // 보고서를 먼저 지운 뒤 계정을 지움 (학생 기기에서 계정이 다시 옮겨지는 일을 막기 위한 순서)
+            try {
+              await withTimeout(supabaseClient.from('report_images').delete().eq('student_id', String(targetId)));
+            } catch (imgErr) {
+              console.error('Image Delete Error:', imgErr);
+            }
             const r1 = await supabaseClient.from('submissions').delete().eq('student_id', String(targetId));
             const r2 = await supabaseClient.from('students').delete().eq('student_id', String(targetId));
             cloudFailed = !!(r1.error || r2.error);
@@ -1880,6 +2063,26 @@
         URL.revokeObjectURL(url);
         showToast('채점 결과 엑셀(CSV) 파일이 다운로드되었습니다.');
       };
+
+      // 보고서를 연 화면에 필요한 사진만 불러오기
+      useEffect(function() {
+        const add = function(id, sub, slot) {
+          const rep = sub && sub.reports && sub.reports[slot];
+          const ai = rep && rep.aiLog;
+          if (ai && ai.hasScreenshot && !ai.screenshotImg) requestImage(id, slot, ai.screenshotRev);
+        };
+        if (gradingStudentId && allSubmissions[gradingStudentId]) {
+          add(gradingStudentId, allSubmissions[gradingStudentId], 'report1');
+          add(gradingStudentId, allSubmissions[gradingStudentId], 'report2');
+        }
+        if (slotViewer && allSubmissions[slotViewer.studentId]) {
+          add(slotViewer.studentId, allSubmissions[slotViewer.studentId], slotViewer.slot);
+        }
+        if (currentUser && currentUser.role === 'student' && (mainTab === 'my_reports' || activeReportModal)) {
+          add(currentUser.id, allSubmissions[currentUser.id], 'report1');
+          add(currentUser.id, allSubmissions[currentUser.id], 'report2');
+        }
+      }, [gradingStudentId, slotViewer, mainTab, activeReportModal, allSubmissions, currentUser, serverStatus]);
 
       return e('div', { className: 'min-h-screen flex flex-col' },
         // 토스트 메시지
@@ -2394,10 +2597,16 @@
                       e('div', { className: 'p-3 bg-purple-50 rounded-xl text-purple-900 mt-2 text-2xs space-y-1' },
                         e('p', { className: 'font-bold' }, 'AI 질문: ' + ((rep.aiLog && rep.aiLog.prompt) || '없음')),
                         e('p', null, '비판 검증: ' + ((rep.aiLog && rep.aiLog.criticalReview) || '없음')),
-                        rep.aiLog && rep.aiLog.screenshotImg && e('div', { className: 'pt-1' },
-                          e('span', { className: 'font-bold text-2xs text-purple-700 block mb-1' }, '첨부된 AI 대화 캡처:'),
-                          e('img', { src: rep.aiLog.screenshotImg, alt: 'AI 캡처', className: 'max-h-28 rounded-lg border border-purple-200 shadow-sm' })
-                        )
+                        (function() {
+                          const info = resolveScreenshot(currentUser.id, slot, rep.aiLog);
+                          if (!info.src && !(rep.aiLog && rep.aiLog.hasScreenshot)) return null;
+                          return e('div', { className: 'pt-1' },
+                            e('span', { className: 'font-bold text-2xs text-purple-700 block mb-1' }, '첨부된 AI 대화 캡처:'),
+                            info.src
+                              ? e('img', { src: info.src, alt: 'AI 캡처', className: 'max-h-28 rounded-lg border border-purple-200 shadow-sm' })
+                              : e('span', { className: 'text-2xs text-purple-500' }, info.status === 'offline' ? '서버가 연결되면 보입니다' : '불러오는 중…')
+                          );
+                        })()
                       )
                     ) : e('p', { className: 'text-xs text-slate-400 py-8 text-center' }, '아직 선택된 탐구 과제가 없습니다.')
                   ),
@@ -2956,11 +3165,11 @@
                       e('i', { className: 'fa-solid fa-image text-purple-600' }),
                       e('span', null, 'AI와의 실제 대화 캡처 사진 첨부 (스크린샷)')
                     ),
-                    reportForm.aiLog.screenshotImg && e('button', {
+                    (reportForm.aiLog.screenshotImg || reportForm.aiLog.hasScreenshot) && e('button', {
                       type: 'button',
                       onClick: function() {
                         setReportForm(Object.assign({}, reportForm, {
-                          aiLog: Object.assign({}, reportForm.aiLog, { screenshotImg: '' })
+                          aiLog: Object.assign({}, reportForm.aiLog, { screenshotImg: '', hasScreenshot: false, screenshotRev: 0 })
                         }));
                       },
                       className: 'text-2xs text-rose-600 hover:underline font-bold'
@@ -2972,9 +3181,19 @@
                     onChange: handleImageUpload,
                     className: 'block w-full text-2xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-2xs file:font-bold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200'
                   }),
-                  reportForm.aiLog.screenshotImg && e('div', { className: 'mt-2 border rounded-lg overflow-hidden max-h-48 bg-slate-50 flex items-center justify-center p-1' },
-                    e('img', { src: reportForm.aiLog.screenshotImg, alt: 'AI 대화 캡처 미리보기', className: 'max-h-44 object-contain rounded' })
-                  )
+                  (function() {
+                    const ownerId = currentUser && currentUser.role === 'teacher' ? 'teacher_preview' : (currentUser && currentUser.id);
+                    const info = resolveScreenshot(ownerId, reportForm.slot, reportForm.aiLog);
+                    if (info.src) {
+                      return e('div', { className: 'mt-2 border rounded-lg overflow-hidden max-h-48 bg-slate-50 flex items-center justify-center p-1' },
+                        e('img', { src: info.src, alt: 'AI 대화 캡처 미리보기', className: 'max-h-44 object-contain rounded' }));
+                    }
+                    if (reportForm.aiLog.hasScreenshot) {
+                      return e('p', { className: 'mt-2 text-2xs text-purple-500' },
+                        info.status === 'offline' ? '이미 올린 사진이 있어요. 서버가 연결되면 미리보기가 보입니다.' : '이미 올린 사진을 불러오는 중…');
+                    }
+                    return null;
+                  })()
                 ),
 
                 e('div', null,
@@ -3176,7 +3395,7 @@
                       e(StatusBadge, { status: st })
                     ),
                     e('div', { className: 'p-4 space-y-4' },
-                      e(ReportView, { report: rep }),
+                      e(ReportView, { report: rep, imageInfo: resolveScreenshot(gradingStudentId, slot, rep && rep.aiLog) }),
                       rep ? (isGradableStatus(st) ? renderGradePanel(slot) : renderNotGradable()) : null
                     )
                   );
@@ -3231,7 +3450,7 @@
                 )
               ),
               e('div', { className: 'p-6 overflow-y-auto space-y-5 flex-1 text-xs' },
-                e(ReportView, { report: rep }),
+                e(ReportView, { report: rep, imageInfo: resolveScreenshot(slotViewer.studentId, slot, rep && rep.aiLog) }),
                 gradable ? renderGradePanel(slot) : renderNotGradable()
               ),
               e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
