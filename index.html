@@ -36,12 +36,20 @@
     const e = React.createElement;
     const { useState, useEffect, useMemo, useRef } = React;
 
+    // =========================================================
+    // ★ 서버 스위치 ★
+    //   true  = 오프라인 모드: 서버에 접속하지 않고 학생 기기에만 저장 (서버 장애 때 사용)
+    //   false = 온라인 모드: Supabase 클라우드와 연동 (평소 사용)
+    // 서버가 복구되면 false로 바꿔 다시 배포하세요. 기기에 쌓인 보고서는 학생이 다음에 접속할 때 자동으로 전달됩니다.
+    // =========================================================
+    const OFFLINE_MODE = true;
+
     // --- Supabase 클라우드 DB 클라이언트 초기화 ---
     const SUPABASE_URL = 'https://inppmcoscwftseeaxvav.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_dHVHe4gXEOYNScqMwtussQ_SzXv6-no';
     let supabaseClient = null;
     try {
-      if (window.supabase) {
+      if (!OFFLINE_MODE && window.supabase) {
         // 이 포털은 Supabase 로그인 기능을 쓰지 않으므로 세션 저장·자동 갱신·브라우저 잠금을 모두 끔
         // (기본값으로 켜 두면 세션 확인 단계에서 요청이 나가지 않고 멈추는 문제가 있었음)
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -58,14 +66,48 @@
       console.error('Supabase Init Error:', err);
     }
 
-    // 클라우드 응답이 없을 때 무한정 기다리지 않도록 시간 제한 (기본 10초)
+    // 클라우드 응답이 없을 때 무한정 기다리지 않도록 시간 제한 (기본 30초: 서버가 느릴 때도 기다려 줌)
     function withTimeout(promise, ms) {
       return Promise.race([
         promise,
         new Promise(function(_, reject) {
-          setTimeout(function() { reject(new Error('TIMEOUT')); }, ms || 10000);
+          setTimeout(function() { reject(new Error('TIMEOUT')); }, ms || 30000);
         })
       ]);
+    }
+
+    // 기기 저장 공간이 가득 차도 화면이 멈추지 않도록 (성공하면 true)
+    function safeSetLocal(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (err) {
+        console.error('Local Storage Error:', err);
+        return false;
+      }
+    }
+
+    function loadLocalSubmissions() {
+      try {
+        const s = localStorage.getItem('music_assessment_submissions');
+        return s ? JSON.parse(s) : {};
+      } catch (err) { return {}; }
+    }
+
+    // 아직 클라우드로 전달하지 못한 학생 학번 목록 (오프라인 모드에서 저장했거나 전송에 실패한 경우)
+    function getPendingSync() {
+      try {
+        const s = localStorage.getItem('music_pending_sync');
+        return s ? JSON.parse(s) : [];
+      } catch (err) { return []; }
+    }
+    function addPendingSync(id) {
+      const list = getPendingSync();
+      if (list.indexOf(String(id)) === -1) list.push(String(id));
+      safeSetLocal('music_pending_sync', JSON.stringify(list));
+    }
+    function removePendingSync(id) {
+      safeSetLocal('music_pending_sync', JSON.stringify(getPendingSync().filter(function(x) { return x !== String(id); })));
     }
 
     // --- 음표 SVG 아이콘 ---
@@ -744,86 +786,173 @@
       // =========================================================
 
       // 1. 클라우드에서 전체 제출 데이터 불러오기 (교사 화면 및 앱 시작 시)
-      const fetchSubmissionsFromCloud = async function() {
+      // 클라우드에서 보고서 불러오기
+      //  - 학생: 자기 보고서 한 건만 / 교사: 전체 / 로그인 전: 불러오지 않음 (서버 부담을 줄이기 위함)
+      const fetchSubmissionsFromCloud = async function(userOverride) {
         if (!supabaseClient) return;
+        const u = (userOverride && userOverride.role) ? userOverride : currentUserRef.current;
+        if (!u) return;
         try {
-          setIsCloudSyncing(true);
-          const { data, error } = await supabaseClient
-            .from('submissions')
-            .select('*');
-
-          if (!error && data && data.length > 0) {
+          if (u.role === 'teacher') setIsCloudSyncing(true);
+          let query = supabaseClient.from('submissions').select('student_id, data');
+          if (u.role === 'student') query = query.eq('student_id', String(u.id));
+          const res = await withTimeout(query);
+          if (!res.error && res.data && res.data.length > 0) {
             setAllSubmissions(function(prev) {
               const merged = Object.assign({}, prev);
-              data.forEach(function(row) {
-                if (row.student_id && row.data) {
+              const pending = getPendingSync();
+              res.data.forEach(function(row) {
+                // 아직 전달하지 못한 내 보고서가 있으면 기기 쪽 내용을 지킴 (전달은 pushPendingForStudent가 담당)
+                if (row.student_id && row.data && pending.indexOf(String(row.student_id)) === -1) {
                   merged[row.student_id] = row.data;
                 }
               });
-              localStorage.setItem('music_assessment_submissions', JSON.stringify(merged));
+              safeSetLocal('music_assessment_submissions', JSON.stringify(merged));
               return merged;
             });
           }
         } catch (err) {
           console.error('Cloud Fetch Error:', err);
         } finally {
-          setIsCloudSyncing(false);
+          if (u.role === 'teacher') setIsCloudSyncing(false);
         }
       };
 
-      // 2. 개별 학생 데이터 클라우드에 업로드
-      const syncStudentToCloud = async function(studentId, submissionData) {
-        if (!supabaseClient || !studentId) return;
+      // 한 학생의 보고서만 다시 불러오기 (실시간 알림에 내용이 빠져 있을 때 사용)
+      const fetchOneFromCloud = async function(id) {
+        if (!supabaseClient || !id) return;
         try {
-          const nowStr = new Date().toISOString();
-          await supabaseClient
+          const res = await withTimeout(supabaseClient.from('submissions').select('student_id, data').eq('student_id', String(id)).maybeSingle());
+          if (!res.error && res.data && res.data.data) {
+            setAllSubmissions(function(prev) {
+              const up = Object.assign({}, prev, { [id]: res.data.data });
+              safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+              return up;
+            });
+          }
+        } catch (err) {
+          console.error('Cloud Fetch One Error:', err);
+        }
+      };
+
+      // 개별 학생 데이터 클라우드에 업로드 (성공하면 true)
+      const syncStudentToCloud = async function(studentId, submissionData) {
+        if (!supabaseClient || !studentId) return false;
+        try {
+          const res = await withTimeout(supabaseClient
             .from('submissions')
             .upsert({
               student_id: String(studentId),
               data: submissionData,
-              updated_at: nowStr
-            }, { onConflict: 'student_id' });
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'student_id' }));
+          if (res.error) { console.error('Cloud Sync Error:', res.error); return false; }
+          return true;
         } catch (err) {
           console.error('Cloud Sync Error:', err);
+          return false;
         }
       };
 
-      // 마운트 시 클라우드 데이터 1회 동기화 및 20초마다 자동 갱신
+      // 이 기기에 쌓여 있던(아직 전달하지 못한) 보고서를 클라우드로 올리기
+      // 클라우드의 채점 결과는 그대로 두고, 학생이 기기에서 쓴 과제 내용으로 갱신
+      const pushPendingForStudent = async function(id) {
+        if (!supabaseClient || getPendingSync().indexOf(String(id)) === -1) return;
+        const local = loadLocalSubmissions()[id];
+        if (!local) { removePendingSync(id); return; }
+        try {
+          const res = await withTimeout(supabaseClient.from('submissions').select('data').eq('student_id', String(id)).maybeSingle());
+          if (res.error) return;
+          const cloud = (res.data && res.data.data) || {};
+          const merged = Object.assign({}, cloud, local, {
+            reports: Object.assign({}, cloud.reports || {}, local.reports || {})
+          });
+          if (cloud.grading) merged.grading = cloud.grading;
+          const ok = await syncStudentToCloud(id, merged);
+          if (ok) {
+            removePendingSync(id);
+            setAllSubmissions(function(prev) {
+              const up = Object.assign({}, prev, { [id]: merged });
+              safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+              return up;
+            });
+            showToast('이 기기에 저장해 둔 보고서를 선생님께 전달했습니다. ☁️', 5000);
+          }
+        } catch (err) {
+          console.error('Pending Push Error:', err);
+        }
+      };
+
       // 항상 최신 로그인 사용자를 가리키도록 (자동 갱신·실시간 콜백에서 사용)
       const currentUserRef = useRef(currentUser);
       currentUserRef.current = currentUser;
 
+      // 60초마다 자동 갱신 (실시간 알림이 놓친 변경을 보완)
       useEffect(function() {
+        if (!supabaseClient) return;
         const tick = function() {
-          fetchSubmissionsFromCloud();
-          verifyStudentStillExists(currentUserRef.current);
+          const u = currentUserRef.current;
+          if (!u) return;
+          fetchSubmissionsFromCloud(u);
+          verifyStudentStillExists(u);
         };
         tick();
-        const interval = setInterval(tick, 20000);
-
-        // [실시간] Supabase Realtime: DB가 바뀌는 즉시 다시 불러오기 (20초 자동 갱신은 예비용으로 유지)
-        let channel = null;
-        if (supabaseClient) {
-          try {
-            channel = supabaseClient
-              .channel('submissions-live')
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, function() {
-                fetchSubmissionsFromCloud();
-              })
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, function() {
-                verifyStudentStillExists(currentUserRef.current);
-              })
-              .subscribe();
-          } catch (err) {
-            console.error('Realtime Subscribe Error:', err);
-          }
-        }
-
-        return function() {
-          clearInterval(interval);
-          if (channel && supabaseClient) supabaseClient.removeChannel(channel);
-        };
+        const interval = setInterval(tick, 60000);
+        return function() { clearInterval(interval); };
       }, []);
+
+      // [실시간] 바뀐 행만 화면에 반영 (전체를 다시 받지 않음)
+      //  - 학생: 내 보고서가 바뀔 때만 / 교사: 모든 학생
+      const liveKey = currentUser ? currentUser.role + ':' + currentUser.id : '';
+      useEffect(function() {
+        if (!supabaseClient || !currentUser) return;
+        const isStudent = currentUser.role === 'student';
+        let channel = null;
+        try {
+          const subFilter = { event: '*', schema: 'public', table: 'submissions' };
+          if (isStudent) subFilter.filter = 'student_id=eq.' + currentUser.id;
+          channel = supabaseClient
+            .channel('live-' + liveKey)
+            .on('postgres_changes', subFilter, function(payload) {
+              if (payload.eventType === 'DELETE') {
+                const delId = payload.old && payload.old.student_id;
+                if (delId) {
+                  setAllSubmissions(function(prev) {
+                    if (!prev[delId]) return prev;
+                    const up = Object.assign({}, prev);
+                    delete up[delId];
+                    safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+                    return up;
+                  });
+                }
+                return;
+              }
+              const row = payload.new || {};
+              if (!row.student_id) return;
+              if (row.data) {
+                setAllSubmissions(function(prev) {
+                  const up = Object.assign({}, prev, { [row.student_id]: row.data });
+                  safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+                  return up;
+                });
+              } else {
+                fetchOneFromCloud(row.student_id);
+              }
+            });
+          if (isStudent) {
+            // 계정 삭제 알림 (계정 표는 내용이 작아서 전체를 받아도 부담이 없음)
+            channel = channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'students' }, function() {
+              verifyStudentStillExists(currentUserRef.current);
+            });
+          }
+          channel.subscribe();
+        } catch (err) {
+          console.error('Realtime Subscribe Error:', err);
+        }
+        return function() {
+          if (channel) supabaseClient.removeChannel(channel);
+        };
+      }, [liveKey]);
 
       // [실시간] 학생 화면: 채점 결과가 새로 들어오면 알림 표시
       const lastGradedRef = useRef(null);
@@ -887,6 +1016,21 @@
         } catch(err) { return {}; }
       };
 
+      const cacheLocalAccount = function(id, name, pw) {
+        const accs = getStudentAccounts();
+        accs[id] = { id: id, name: name, pw: pw };
+        safeSetLocal('music_student_accounts', JSON.stringify(accs));
+      };
+
+      // 서버가 느릴 때 기다리는 중임을 알려 줌
+      const startSlowNotice = function() {
+        let done = false;
+        const timer = setTimeout(function() {
+          if (!done) showToast('서버 응답이 느립니다. 최대 30초까지 기다리는 중이에요…', 26000);
+        }, 4000);
+        return function() { done = true; clearTimeout(timer); };
+      };
+
       const ACCOUNT_STORE_ERROR = '학생 계정 저장소(students 표)에 연결할 수 없습니다. 잠시 후 다시 시도하고, 계속되면 선생님께 알려 주세요.';
 
       const cloudGetAccount = function(id) {
@@ -896,7 +1040,7 @@
       // 오류 안내: 시간 초과인지, Supabase가 돌려준 오류인지 구분해서 보여 줌
       const showAccountError = function(err) {
         if (err && err.message === 'TIMEOUT') {
-          showToast('클라우드 응답이 없습니다(10초 초과). 인터넷 연결을 확인하고 다시 시도해 주세요.', 6000);
+          showToast('클라우드 응답이 없습니다(30초 초과). 서버 점검 중일 수 있으니 잠시 후 다시 시도해 주세요.', 6000);
           return;
         }
         const detail = err && (err.message || err.code) ? ' (' + (err.code ? err.code + ': ' : '') + (err.message || '') + ')' : '';
@@ -905,16 +1049,17 @@
 
       // 이 기기에 남아 있는 해당 학생의 계정·보고서 사본 지우기
       const purgeLocalStudent = function(id) {
+        removePendingSync(id);
         const accs = getStudentAccounts();
         if (accs[id]) {
           delete accs[id];
-          localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+          safeSetLocal('music_student_accounts', JSON.stringify(accs));
         }
         setAllSubmissions(function(prev) {
           if (!prev[id]) return prev;
           const up = Object.assign({}, prev);
           delete up[id];
-          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+          safeSetLocal('music_assessment_submissions', JSON.stringify(up));
           return up;
         });
       };
@@ -924,8 +1069,12 @@
       const migrateLegacyAccount = async function(id) {
         const local = getStudentAccounts()[id];
         if (!local) return null;
-        const subRes = await withTimeout(supabaseClient.from('submissions').select('student_id').eq('student_id', String(id)).maybeSingle());
-        if (subRes.error || !subRes.data) return null;
+        // 오프라인 모드에서 이 기기로 가입·작성해 둔 학생이면 클라우드 기록이 없어도 옮김
+        const isPending = getPendingSync().indexOf(String(id)) !== -1;
+        if (!isPending) {
+          const subRes = await withTimeout(supabaseClient.from('submissions').select('student_id').eq('student_id', String(id)).maybeSingle());
+          if (subRes.error || !subRes.data) return null;
+        }
         const acc = { student_id: String(id), name: local.name, pw: local.pw };
         const ins = await withTimeout(supabaseClient.from('students').upsert(acc, { onConflict: 'student_id' }));
         return ins.error ? null : acc;
@@ -938,8 +1087,10 @@
         try {
           const res = await cloudGetAccount(user.id);
           if (res.error) return true;
-          if (res.data) return true;
-          if (await migrateLegacyAccount(user.id)) return true;
+          if (res.data || await migrateLegacyAccount(user.id)) {
+            pushPendingForStudent(user.id);
+            return true;
+          }
         } catch (err) {
           return true;
         }
@@ -956,12 +1107,31 @@
         if (!/^\d{4}$/.test(studentIdInput)) { showToast('학번은 4자리 숫자여야 합니다.'); return; }
         if (!studentNameInput.trim()) { showToast('성명을 입력해 주세요.'); return; }
         if (!/^\d{4}$/.test(studentPwInput)) { showToast('비밀번호는 4자리 숫자여야 합니다.'); return; }
+        const id = studentIdInput;
+        const name = studentNameInput.trim();
+
+        // [오프라인 모드] 이 기기에만 계정을 만들고, 서버 복구 후 첫 접속 때 클라우드로 옮김
+        if (OFFLINE_MODE) {
+          if (getStudentAccounts()[id]) { showToast('이 기기에 이미 등록된 학번입니다. [로그인]으로 들어가 주세요.'); return; }
+          cacheLocalAccount(id, name, studentPwInput);
+          const offSub = loadLocalSubmissions()[id] || { studentId: id, studentName: name, reports: {} };
+          setAllSubmissions(function(prev) {
+            const up = Object.assign({}, prev, { [id]: offSub });
+            safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+            return up;
+          });
+          addPendingSync(id);
+          updateCurrentUserSession({ role: 'student', id: id, name: name });
+          setIsRegisterMode(false);
+          showToast(name + ' 님, 이 기기에 등록되었습니다. (오프라인 모드: 같은 기기에서 이어서 작성하세요)', 5000);
+          return;
+        }
+
         if (!supabaseClient) { showToast(ACCOUNT_STORE_ERROR, 6000); return; }
         if (authBusy) return;
 
-        const id = studentIdInput;
-        const name = studentNameInput.trim();
         setAuthBusy(true);
+        const stopSlow = startSlowNotice();
         try {
           const accRes = await cloudGetAccount(id);
           if (accRes.error) { showAccountError(accRes.error); return; }
@@ -980,6 +1150,7 @@
           showAccountError(err);
           return;
         } finally {
+          stopSlow();
           setAuthBusy(false);
         }
 
@@ -988,10 +1159,11 @@
         const initSub = { studentId: id, studentName: name, reports: {} };
         setAllSubmissions(function(prev) {
           const up = Object.assign({}, prev, { [id]: initSub });
-          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+          safeSetLocal('music_assessment_submissions', JSON.stringify(up));
           return up;
         });
         syncStudentToCloud(id, initSub);
+        cacheLocalAccount(id, name, studentPwInput);
 
         updateCurrentUserSession({ role: 'student', id: id, name: name });
         setIsRegisterMode(false);
@@ -1000,11 +1172,23 @@
 
       const handleStudentLogin = async function(ev) {
         ev.preventDefault();
+        const id = studentIdInput;
+
+        // [오프라인 모드] 이 기기에 저장된 계정으로만 로그인
+        if (OFFLINE_MODE) {
+          const localAcc = getStudentAccounts()[id];
+          if (!localAcc) { showToast('이 기기에 등록되지 않은 학번입니다. 오프라인 모드에서는 [최초 등록하기]로 이 기기에 등록해 주세요.', 5000); return; }
+          if (localAcc.pw !== studentPwInput) { showToast('비밀번호가 일치하지 않습니다.'); return; }
+          updateCurrentUserSession({ role: 'student', id: id, name: localAcc.name });
+          showToast(localAcc.name + ' 님, 환영합니다! (오프라인 모드)');
+          return;
+        }
+
         if (!supabaseClient) { showToast(ACCOUNT_STORE_ERROR, 6000); return; }
         if (authBusy) return;
-        const id = studentIdInput;
         let acc = null;
         setAuthBusy(true);
+        const stopSlow = startSlowNotice();
         try {
           const res = await cloudGetAccount(id);
           if (res.error) { showAccountError(res.error); return; }
@@ -1018,6 +1202,7 @@
           showAccountError(err);
           return;
         } finally {
+          stopSlow();
           setAuthBusy(false);
         }
 
@@ -1027,9 +1212,12 @@
           return;
         }
         if (acc.pw !== studentPwInput) { showToast('비밀번호가 일치하지 않습니다.'); return; }
-        updateCurrentUserSession({ role: 'student', id: String(acc.student_id), name: acc.name });
-        fetchSubmissionsFromCloud();
+        const loggedUser = { role: 'student', id: String(acc.student_id), name: acc.name };
+        cacheLocalAccount(loggedUser.id, acc.name, acc.pw);
+        updateCurrentUserSession(loggedUser);
         showToast(acc.name + ' 님, 환영합니다!');
+        await pushPendingForStudent(loggedUser.id);
+        fetchSubmissionsFromCloud(loggedUser);
       };
 
       const handleTeacherLogin = function(ev) {
@@ -1043,7 +1231,7 @@
           setNewTeacherId(teacherAuth.id);
           setMainTab('teacher_dash');
           setTeacherSubTab('submissions');
-          fetchSubmissionsFromCloud();
+          fetchSubmissionsFromCloud(tUser);
           showToast('교사 관리자 모드로 접속했습니다. 🛡️');
         } else {
           showToast('아이디 또는 6자리 비밀번호가 일치하지 않습니다.');
@@ -1062,7 +1250,7 @@
         if (!/^\d{6}$/.test(newTeacherPw)) { showToast('비밀번호는 반드시 6자리 숫자여야 합니다.'); return; }
         const updated = { id: newTeacherId.trim(), pw: newTeacherPw };
         setTeacherAuth(updated);
-        localStorage.setItem('music_teacher_auth', JSON.stringify(updated));
+        safeSetLocal('music_teacher_auth', JSON.stringify(updated));
         setNewTeacherPw('');
         showToast('교사 아이디와 6자리 비밀번호가 변경되었습니다! 🔒');
       };
@@ -1074,18 +1262,18 @@
         if (editingItemCategory === 'inquiry') {
           const updated = inquiryDataState.map(function(it) { return it.id === editingItemForm.id ? editingItemForm : it; });
           setInquiryDataState(updated);
-          localStorage.setItem('music_custom_inquiry_data', JSON.stringify(updated));
+          safeSetLocal('music_custom_inquiry_data', JSON.stringify(updated));
         } else if (editingItemCategory === 'product') {
           const updated = productDataState.map(function(it) { return it.id === editingItemForm.id ? editingItemForm : it; });
           setProductDataState(updated);
-          localStorage.setItem('music_custom_product_data', JSON.stringify(updated));
+          safeSetLocal('music_custom_product_data', JSON.stringify(updated));
         } else if (editingItemCategory === 'east_west') {
           const updated = eastWestDataState.map(function(it) { return it.id === editingItemForm.id ? editingItemForm : it; });
           setEastWestDataState(updated);
-          localStorage.setItem('music_custom_eastwest_data', JSON.stringify(updated));
+          safeSetLocal('music_custom_eastwest_data', JSON.stringify(updated));
         } else if (editingItemCategory === 'pop_history_guide') {
           setPopGuideState(editingItemForm);
-          localStorage.setItem('music_custom_pop_guide', JSON.stringify(editingItemForm));
+          safeSetLocal('music_custom_pop_guide', JSON.stringify(editingItemForm));
         }
 
         setActiveItemEditModal(false);
@@ -1157,20 +1345,45 @@
         setActiveReportModal(true);
       };
 
+      // AI 캡처 사진: 가로 최대 1280px JPEG로 줄여서 저장 (기기 저장 공간과 서버 부담을 줄임)
       const handleImageUpload = function(ev) {
         const file = ev.target.files && ev.target.files[0];
         if (!file) return;
-        if (file.size > 2 * 1024 * 1024) {
-          showToast('사진 용량은 2MB 이하만 등록 가능합니다.');
+        if (file.size > 10 * 1024 * 1024) {
+          showToast('사진 용량은 10MB 이하만 등록 가능합니다.');
           return;
         }
+        const applyImage = function(dataUrl) {
+          setReportForm(function(prev) {
+            return Object.assign({}, prev, { aiLog: Object.assign({}, prev.aiLog, { screenshotImg: dataUrl }) });
+          });
+          showToast('AI 대화 캡처 사진이 정상 등록되었습니다! 📸');
+        };
         const reader = new FileReader();
         reader.onload = function(uploadEv) {
-          const base64 = uploadEv.target.result;
-          setReportForm(Object.assign({}, reportForm, {
-            aiLog: Object.assign({}, reportForm.aiLog, { screenshotImg: base64 })
-          }));
-          showToast('AI 대화 캡처 사진이 정상 등록되었습니다! 📸');
+          const original = uploadEv.target.result;
+          const img = new Image();
+          img.onload = function() {
+            try {
+              const scale = Math.min(1, 1280 / img.width);
+              const canvas = document.createElement('canvas');
+              canvas.width = Math.round(img.width * scale);
+              canvas.height = Math.round(img.height * scale);
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              applyImage(canvas.toDataURL('image/jpeg', 0.75));
+            } catch (err) {
+              if (file.size <= 2 * 1024 * 1024) applyImage(original);
+              else showToast('사진을 처리하지 못했습니다. 2MB 이하의 PNG·JPG 사진으로 다시 올려 주세요.', 5000);
+            }
+          };
+          img.onerror = function() {
+            if (file.size <= 2 * 1024 * 1024) applyImage(original);
+            else showToast('사진을 읽지 못했습니다. PNG·JPG 형식으로 다시 올려 주세요.', 5000);
+          };
+          img.src = original;
         };
         reader.readAsDataURL(file);
       };
@@ -1194,7 +1407,7 @@
         // 학생이 저장할 때 클라우드의 최신 채점 결과를 덮어쓰지 않도록 먼저 가져와 유지
         if (supabaseClient && currentUser.role === 'student') {
           try {
-            const res = await supabaseClient.from('submissions').select('data').eq('student_id', String(userKey)).maybeSingle();
+            const res = await withTimeout(supabaseClient.from('submissions').select('data').eq('student_id', String(userKey)).maybeSingle());
             if (res.data && res.data.data && res.data.data.grading) {
               fullData.grading = res.data.data.grading;
             }
@@ -1205,17 +1418,28 @@
 
         const up = Object.assign({}, allSubmissions, { [userKey]: fullData });
 
+        // 먼저 이 기기에 저장 (저장 공간이 부족하면 창을 닫지 않고 안내)
+        if (!safeSetLocal('music_assessment_submissions', JSON.stringify(up))) {
+          showToast('기기 저장 공간이 부족합니다. AI 캡처 사진을 지우고 다시 저장해 주세요.', 6000);
+          return;
+        }
         setAllSubmissions(up);
-        localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+        if (currentUser.role === 'student') addPendingSync(userKey);
 
-        // 클라우드 Supabase DB로 실시간 전송
-        syncStudentToCloud(userKey, fullData);
+        // 클라우드로 전송 (오프라인 모드이거나 실패하면 다음 접속 때 자동 전달)
+        const sent = await syncStudentToCloud(userKey, fullData);
+        if (sent && currentUser.role === 'student') removePendingSync(userKey);
 
         setActiveReportModal(false);
-        showToast(currentUser.role === 'teacher'
-          ? (isSubmit ? '[교사 점검] 최종 제출 시뮬레이션 완료! (클라우드 반영) ☁️' : '[교사 점검] 임시 저장 완료! 💾')
-          : (isSubmit ? '보고서가 교사 대시보드로 최종 제출되었습니다! 🎉' : '임시 저장되었습니다. (클라우드 동기화 완료) 💾')
-        );
+        if (currentUser.role === 'teacher') {
+          showToast(isSubmit ? '[교사 점검] 최종 제출 시뮬레이션 완료!' : '[교사 점검] 임시 저장 완료! 💾');
+        } else if (sent) {
+          showToast(isSubmit ? '보고서가 교사 대시보드로 최종 제출되었습니다! 🎉' : '임시 저장되었습니다. (클라우드 동기화 완료) 💾');
+        } else {
+          showToast(isSubmit
+            ? '최종 제출로 이 기기에 저장했습니다. 서버가 복구되면 선생님께 자동 전달됩니다. 📦'
+            : '이 기기에 임시 저장했습니다. 서버가 복구되면 자동으로 전달됩니다. 💾', 5000);
+        }
       };
 
       const resetAllData = async function() {
@@ -1312,7 +1536,7 @@
 
         setAllSubmissions(function(prev) {
           const up = Object.assign({}, prev, { [studentId]: updatedStudent });
-          localStorage.setItem('music_assessment_submissions', JSON.stringify(up));
+          safeSetLocal('music_assessment_submissions', JSON.stringify(up));
           return up;
         });
 
@@ -1428,7 +1652,7 @@
 
         if (accs[oldId] || accs[newId]) {
           delete accs[oldId];
-          localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+          safeSetLocal('music_student_accounts', JSON.stringify(accs));
         }
 
         const updatedTarget = Object.assign({}, targetData, {
@@ -1441,7 +1665,7 @@
         upSubs[newId] = updatedTarget;
 
         setAllSubmissions(upSubs);
-        localStorage.setItem('music_assessment_submissions', JSON.stringify(upSubs));
+        safeSetLocal('music_assessment_submissions', JSON.stringify(upSubs));
 
         if (supabaseClient) {
           try {
@@ -1482,12 +1706,12 @@
 
         const accs = getStudentAccounts();
         delete accs[targetId];
-        localStorage.setItem('music_student_accounts', JSON.stringify(accs));
+        safeSetLocal('music_student_accounts', JSON.stringify(accs));
 
         const upSubs = Object.assign({}, allSubmissions);
         delete upSubs[targetId];
         setAllSubmissions(upSubs);
-        localStorage.setItem('music_assessment_submissions', JSON.stringify(upSubs));
+        safeSetLocal('music_assessment_submissions', JSON.stringify(upSubs));
 
         let cloudFailed = false;
         if (supabaseClient) {
@@ -1560,10 +1784,15 @@
                 e('div', { className: 'flex items-center gap-2' },
                   e('h1', { className: 'text-base sm:text-lg font-black text-slate-900' }, '송악고등학교 음악 수행평가'),
                   e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800' }, '개인 탐구 2개 30점씩 총 60점 만점'),
-                  e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hidden sm:inline-flex items-center gap-1' },
-                    e('span', { className: 'w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse' }),
-                    e('span', null, '클라우드 실시간 연동')
-                  )
+                  OFFLINE_MODE
+                    ? e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 hidden sm:inline-flex items-center gap-1' },
+                        e('i', { className: 'fa-solid fa-plug-circle-xmark' }),
+                        e('span', null, '임시 오프라인 모드')
+                      )
+                    : e('span', { className: 'text-2xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hidden sm:inline-flex items-center gap-1' },
+                        e('span', { className: 'w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse' }),
+                        e('span', null, '클라우드 실시간 연동')
+                      )
                 ),
                 e('p', { className: 'text-2xs text-slate-500 hidden sm:block' }, '4개의 주제 중 2가지 선택 탐구 | AI 프롬프트 및 비판적 검증 분석 | 5점 급간 루브릭 채점')
               )
@@ -1609,6 +1838,20 @@
                 e('i', { className: 'fa-solid fa-user-shield text-purple-600' }),
                 e('span', null, '교사 평가 관리 대시보드')
               )
+            )
+          )
+        ),
+
+        // 오프라인 모드 안내 배너
+        OFFLINE_MODE && e('div', { className: 'bg-amber-100 border-b border-amber-300 text-amber-950 py-2.5 px-4' },
+          e('div', { className: 'max-w-7xl mx-auto flex items-start gap-2 text-xs' },
+            e('i', { className: 'fa-solid fa-triangle-exclamation text-amber-600 mt-0.5' }),
+            e('div', null,
+              e('p', { className: 'font-bold' }, '임시 오프라인 모드: 서버 점검 중이라 작성한 보고서가 이 기기에만 저장됩니다.'),
+              e('p', { className: 'text-2xs text-amber-900/90 mt-0.5' },
+                currentUser && currentUser.role === 'teacher'
+                  ? '서버가 복구되기 전까지는 학생 보고서를 볼 수 없습니다. 복구 후 코드의 OFFLINE_MODE를 false로 바꿔 다시 배포하면, 학생이 접속할 때 기기에 쌓인 보고서가 자동으로 전달됩니다.'
+                  : '반드시 같은 기기·같은 브라우저에서 이어서 작성하세요. 서버가 복구되면 다음에 접속할 때 선생님께 자동으로 전달됩니다. 브라우저 기록 삭제·시크릿 창은 사용하지 마세요.')
             )
           )
         ),
