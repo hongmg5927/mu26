@@ -128,6 +128,17 @@
       return out;
     }
 
+    // 비운 과제 슬롯의 채점 기록 지우기 (총점도 다시 계산)
+    function stripSlotGrading(grading, slot) {
+      if (!grading) return grading;
+      const n = slot === 'report1' ? '1' : '2';
+      const g = Object.assign({}, grading);
+      ['r' + n, 'score' + n, 'r' + n + '_content', 'r' + n + '_analysis', 'r' + n + '_comment'].forEach(function(k) { delete g[k]; });
+      if (g.score1 === undefined && g.score2 === undefined) delete g.totalScore;
+      else g.totalScore = (g.score1 || 0) + (g.score2 || 0);
+      return g;
+    }
+
     // 이미 올린 사진 버전 기록 (같은 사진을 다시 올리지 않기 위함)
     function getUploadedImages() {
       try { const s = localStorage.getItem('music_uploaded_images'); return s ? JSON.parse(s) : {}; } catch (err) { return {}; }
@@ -866,6 +877,7 @@
 
       const [newTeacherId, setNewTeacherId] = useState('');
       const [newTeacherPw, setNewTeacherPw] = useState('');
+      const [currentTeacherPw, setCurrentTeacherPw] = useState('');
       const [selectedSubject, setSelectedSubject] = useState('all');
       const [toastMessage, setToastMessage] = useState('');
 
@@ -968,7 +980,7 @@
               for (let j = 0; j < slots.length; j++) {
                 const rep = submissionData.reports && submissionData.reports[slots[j]];
                 const key2 = studentId + ':' + slots[j];
-                if (rep && rep.aiLog && rep.aiLog.hasScreenshot === false && uploaded[key2] !== undefined) {
+                if ((rep === null || (rep && rep.aiLog && rep.aiLog.hasScreenshot === false)) && uploaded[key2] !== undefined) {
                   await withTimeout(supabaseClient.from('report_images').delete().eq('student_id', String(studentId)).eq('slot', slots[j]));
                   delete uploaded[key2];
                   safeSetLocal('music_uploaded_images', JSON.stringify(uploaded));
@@ -1062,6 +1074,13 @@
             reports: Object.assign({}, cloud.reports || {}, local.reports || {})
           });
           if (cloud.grading) merged.grading = cloud.grading;
+          // 이 기기에서 비운 슬롯은 클라우드에서도 비우고 그 슬롯의 채점 기록도 지움
+          ['report1', 'report2'].forEach(function(slot) {
+            if (local.reports && local.reports[slot] === null) {
+              merged.reports[slot] = null;
+              merged.grading = stripSlotGrading(merged.grading, slot);
+            }
+          });
           const ok = await syncStudentToCloud(id, merged);
           if (ok) {
             removePendingSync(id);
@@ -1480,22 +1499,75 @@
         fetchSubmissionsFromCloud(loggedUser);
       };
 
-      const handleTeacherLogin = function(ev) {
-        ev.preventDefault();
-        if (teacherIdInput === teacherAuth.id && teacherPwInput === teacherAuth.pw) {
-          const tUser = { role: 'teacher', id: teacherAuth.id, name: '음악 교사' };
-          updateCurrentUserSession(tUser);
-          setShowTeacherModal(false);
-          setTeacherIdInput('');
-          setTeacherPwInput('');
-          setNewTeacherId(teacherAuth.id);
-          setMainTab('teacher_dash');
-          setTeacherSubTab('submissions');
-          fetchSubmissionsFromCloud(tUser);
-          showToast('교사 관리자 모드로 접속했습니다. 🛡️');
-        } else {
-          showToast('아이디 또는 6자리 비밀번호가 일치하지 않습니다.');
+      // =========================================================
+      // [교사 로그인] 서버(teacher_login 함수)에서 확인 → 어느 컴퓨터에서든 같은 계정으로 로그인
+      //  - 비밀번호는 서버에 암호화되어 저장되고, 브라우저에서 직접 읽을 수 없음
+      //  - 10번 연속 틀리면 10분 동안 잠김 (비밀번호 무작위 대입 방지)
+      //  - 서버 설정(SQL) 전이거나 서버가 응답하지 않으면 이 컴퓨터에 저장된 계정으로 대신 확인
+      // =========================================================
+      const isMissingFunction = function(err) {
+        if (!err) return false;
+        return err.code === 'PGRST202' || err.code === '42883' || /Could not find the function|does not exist/i.test(String(err.message || ''));
+      };
+
+      const finishTeacherLogin = function(id) {
+        const tUser = { role: 'teacher', id: id, name: '음악 교사' };
+        updateCurrentUserSession(tUser);
+        setShowTeacherModal(false);
+        setTeacherIdInput('');
+        setTeacherPwInput('');
+        setNewTeacherId(id);
+        setMainTab('teacher_dash');
+        setTeacherSubTab('submissions');
+        fetchSubmissionsFromCloud(tUser);
+        showToast('교사 관리자 모드로 접속했습니다. 🛡️');
+      };
+
+      // 이 컴퓨터에 저장된 교사 계정으로 확인 (allowDefault: 서버 설정 전에만 기본 계정 admin/123456 허용)
+      const localTeacherLogin = function(id, pw, allowDefault, note) {
+        let saved = null;
+        try { const s0 = localStorage.getItem('music_teacher_auth'); saved = s0 ? JSON.parse(s0) : null; } catch (err) { saved = null; }
+        const auth = saved || (allowDefault ? { id: 'admin', pw: '123456' } : null);
+        if (auth && id === auth.id && pw === auth.pw) {
+          finishTeacherLogin(id);
+          if (note) showToast(note, 6000);
+          return;
         }
+        showToast(auth ? '아이디 또는 6자리 비밀번호가 일치하지 않습니다.' : '서버 응답이 없어 지금은 이 컴퓨터에서 교사 로그인을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.', 6000);
+      };
+
+      const handleTeacherLogin = async function(ev) {
+        ev.preventDefault();
+        const id = teacherIdInput.trim();
+        const pw = teacherPwInput;
+        if (!cloudReady()) { localTeacherLogin(id, pw, false, '서버 응답이 없어 이 컴퓨터에 저장된 계정으로 접속했습니다.'); return; }
+        if (authBusy) return;
+        setAuthBusy(true);
+        let result = null, err = null;
+        try {
+          const res = await withTimeout(supabaseClient.rpc('teacher_login', { p_id: id, p_pw: pw }), SERVER_CHECK_MS);
+          if (res.error) err = res.error; else result = res.data;
+        } catch (e2) {
+          err = e2;
+        } finally {
+          setAuthBusy(false);
+        }
+
+        if (err) {
+          if (isNetworkFailure(err) || (err && err.message === 'TIMEOUT')) {
+            markOffline();
+            localTeacherLogin(id, pw, false, '서버 응답이 없어 이 컴퓨터에 저장된 계정으로 접속했습니다.');
+          } else if (isMissingFunction(err)) {
+            localTeacherLogin(id, pw, true, '아직 서버에 교사 계정이 설정되지 않아 이 컴퓨터의 계정으로 접속했습니다. 안내된 SQL을 실행하면 다른 컴퓨터에서도 로그인할 수 있어요.');
+          } else {
+            showAccountError(err);
+          }
+          return;
+        }
+        if (result === 'ok') { finishTeacherLogin(id); return; }
+        if (result === 'locked') { showToast('비밀번호를 10번 틀려 10분 동안 교사 로그인이 잠겼습니다. 잠시 후 다시 시도해 주세요.', 7000); return; }
+        if (result === 'no_account') { localTeacherLogin(id, pw, true, '서버에 교사 계정이 없어 이 컴퓨터의 계정으로 접속했습니다. 안내된 SQL을 실행해 주세요.'); return; }
+        showToast('아이디 또는 6자리 비밀번호가 일치하지 않습니다.');
       };
 
       const handleLogout = function() {
@@ -1504,15 +1576,50 @@
         showToast('로그아웃되었습니다.');
       };
 
-      const handleSaveTeacherAuth = function(ev) {
+      const handleSaveTeacherAuth = async function(ev) {
         ev.preventDefault();
-        if (!newTeacherId.trim()) { showToast('교사 아이디를 입력해 주세요.'); return; }
-        if (!/^\d{6}$/.test(newTeacherPw)) { showToast('비밀번호는 반드시 6자리 숫자여야 합니다.'); return; }
-        const updated = { id: newTeacherId.trim(), pw: newTeacherPw };
-        setTeacherAuth(updated);
-        safeSetLocal('music_teacher_auth', JSON.stringify(updated));
-        setNewTeacherPw('');
-        showToast('교사 아이디와 6자리 비밀번호가 변경되었습니다! 🔒');
+        const newId = newTeacherId.trim();
+        if (!newId) { showToast('교사 아이디를 입력해 주세요.'); return; }
+        if (!/^\d{6}$/.test(newTeacherPw)) { showToast('새 비밀번호는 반드시 6자리 숫자여야 합니다.'); return; }
+        if (!currentTeacherPw) { showToast('지금 쓰고 있는 비밀번호를 입력해 주세요.'); return; }
+        const oldId = (currentUser && currentUser.id) || teacherAuth.id;
+
+        const saveLocal = function() {
+          const updated = { id: newId, pw: newTeacherPw };
+          setTeacherAuth(updated);
+          safeSetLocal('music_teacher_auth', JSON.stringify(updated));
+          updateCurrentUserSession({ role: 'teacher', id: newId, name: '음악 교사' });
+          setNewTeacherPw('');
+          setCurrentTeacherPw('');
+        };
+
+        if (!cloudReady()) { showToast(SERVER_DOWN_MSG, 6000); return; }
+        try {
+          const res = await withTimeout(supabaseClient.rpc('teacher_change_auth', { p_old_id: oldId, p_old_pw: currentTeacherPw, p_new_id: newId, p_new_pw: newTeacherPw }), SERVER_CHECK_MS);
+          if (res.error) {
+            if (isMissingFunction(res.error)) {
+              // 서버 설정 전: 예전처럼 이 컴퓨터에만 저장
+              if (currentTeacherPw !== teacherAuth.pw) { showToast('지금 쓰고 있는 비밀번호가 맞지 않습니다.'); return; }
+              saveLocal();
+              showToast('이 컴퓨터에만 저장했습니다. 다른 컴퓨터에서도 쓰려면 안내된 SQL을 먼저 실행해 주세요.', 6000);
+              return;
+            }
+            if (isNetworkFailure(res)) { markOffline(); showToast(SERVER_DOWN_MSG, 6000); return; }
+            showAccountError(res.error);
+            return;
+          }
+          if (res.data === 'ok') {
+            saveLocal();
+            showToast('교사 아이디와 비밀번호가 서버에 저장되었습니다. 이제 어느 컴퓨터에서든 새 정보로 로그인하세요. 🔒', 6000);
+          } else if (res.data === 'locked') {
+            showToast('비밀번호를 여러 번 틀려 10분 동안 잠겼습니다. 잠시 후 다시 시도해 주세요.', 6000);
+          } else {
+            showToast('지금 쓰고 있는 비밀번호가 맞지 않습니다.');
+          }
+        } catch (err) {
+          if (isNetworkFailure(err)) markOffline();
+          showToast(SERVER_DOWN_MSG, 6000);
+        }
       };
 
       const handleSaveItemEdit = function(ev) {
@@ -1546,6 +1653,63 @@
         setActiveItemEditModal(true);
       };
 
+      // [학생] 과제 슬롯 비우기: 다른 주제로 바꾸고 싶을 때 사용
+      const clearSlot = async function(slot) {
+        if (!currentUser || currentUser.role !== 'student') return;
+        const id = currentUser.id;
+        const n = slot === 'report1' ? '1' : '2';
+        const mine = allSubmissions[id] || { studentId: id, studentName: currentUser.name, reports: {} };
+        const st = getSlotStatus(mine, slot);
+        if (st.kind === 'none') return;
+        const warn = st.kind === 'graded' || st.grade
+          ? '선택 과제 ' + n + '의 내용과 선생님의 채점 결과(' + (st.score !== undefined ? st.score + '점' : '') + ')가 모두 지워집니다. 되돌릴 수 없어요. 정말 비울까요?'
+          : '선택 과제 ' + n + '에 작성한 내용이 모두 지워집니다. 되돌릴 수 없어요. 정말 비울까요?';
+        if (!window.confirm(warn)) return;
+
+        const updated = Object.assign({}, mine, {
+          reports: Object.assign({}, mine.reports || {}, { [slot]: null }),
+          grading: stripSlotGrading(mine.grading, slot)
+        });
+        if (!updated.grading) delete updated.grading;
+        setAllSubmissions(function(prev) {
+          const up = Object.assign({}, prev, { [id]: updated });
+          safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+          return up;
+        });
+        addPendingSync(id);
+
+        if (!cloudReady()) {
+          showToast('선택 과제 ' + n + '을(를) 비웠어요. 서버가 돌아오면 선생님 화면에도 반영됩니다.', 5000);
+          return;
+        }
+        showToast('선택 과제 ' + n + '을(를) 비우는 중…', 30000);
+        const stillExists = await verifyStudentStillExists(currentUser);
+        if (!stillExists) return;
+        // 클라우드의 최신 채점 기록에서 이 슬롯 것만 지우고 나머지는 지킴
+        try {
+          const res = await withTimeout(supabaseClient.from('submissions').select('grading:data->grading').eq('student_id', String(id)).maybeSingle(), SERVER_CHECK_MS);
+          if (isNetworkFailure(res)) markOffline();
+          else if (!res.error && res.data) {
+            const g = stripSlotGrading(res.data.grading || undefined, slot);
+            if (g) updated.grading = g; else delete updated.grading;
+          }
+        } catch (err) {
+          if (isNetworkFailure(err)) markOffline();
+        }
+        const sent = await syncStudentToCloud(id, updated);
+        if (sent) {
+          removePendingSync(id);
+          setAllSubmissions(function(prev) {
+            const up = Object.assign({}, prev, { [id]: updated });
+            safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+            return up;
+          });
+          showToast('선택 과제 ' + n + '을(를) 비웠어요. 이제 원하는 주제 탭에서 새로 작성하세요. 🧹', 5000);
+        } else {
+          showToast('선택 과제 ' + n + '을(를) 이 기기에서 비웠어요. 서버가 돌아오면 자동으로 반영됩니다.', 5000);
+        }
+      };
+
       const openReportModal = function(categoryType, item, defaultSlot) {
         if (!currentUser) {
           showToast('로그인 후 점검 및 작성을 진행할 수 있습니다.');
@@ -1553,8 +1717,30 @@
         }
         const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
         const sData = allSubmissions[userKey] || { reports: {} };
-        const slot = defaultSlot || (!sData.reports || !sData.reports.report1 ? 'report1' : 'report2');
-        const ex = sData.reports ? sData.reports[slot] : null;
+        const r1 = sData.reports && sData.reports.report1;
+        const r2 = sData.reports && sData.reports.report2;
+        let slot = defaultSlot;
+        if (!slot) {
+          // 주제 탭에서 열 때: 빈 슬롯 → 같은 주제로 쓰던 슬롯 순서로 고르고, 둘 다 다른 주제로 차 있으면 막고 안내
+          if (!r1) slot = 'report1';
+          else if (!r2) slot = 'report2';
+          else if (r1.topicCategory === categoryType) slot = 'report1';
+          else if (r2.topicCategory === categoryType) slot = 'report2';
+          else if (currentUser.role === 'teacher') slot = 'report1';
+          else {
+            setMainTab('my_reports');
+            showToast('과제 슬롯 2개가 모두 다른 주제로 차 있어요. 바꿀 과제 카드의 [내용 비우기]를 먼저 눌러 주세요.', 6000);
+            return;
+          }
+        }
+        const exRaw = sData.reports ? sData.reports[slot] : null;
+        // 슬롯에 다른 주제가 들어 있으면 그 내용을 불러오지 않음 (주제가 섞이는 문제 방지)
+        const ex = exRaw && (exRaw.topicCategory || 'inquiry') === categoryType ? exRaw : null;
+        if (exRaw && !ex && currentUser.role === 'student') {
+          showToast('이 슬롯에는 다른 주제의 보고서가 있어요. 먼저 [내용 비우기]를 눌러 주세요.', 6000);
+          setMainTab('my_reports');
+          return;
+        }
 
         const ph = {
           topicTitle: (item && (item.title || item.question || item.name)) || '탐구/기획 주제명을 입력하세요',
@@ -2610,7 +2796,14 @@
                       )
                     ) : e('p', { className: 'text-xs text-slate-400 py-8 text-center' }, '아직 선택된 탐구 과제가 없습니다.')
                   ),
-                  e('button', { onClick: function() { openReportModal((rep && rep.topicCategory) || 'inquiry', rep, slot); }, className: 'mt-6 w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs' }, rep ? '보고서 수정하기' : '이 슬롯에 과제 등록')
+                  e('div', { className: 'mt-6 space-y-2' },
+                    e('button', { onClick: function() { openReportModal((rep && rep.topicCategory) || 'inquiry', rep, slot); }, className: 'w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs' }, rep ? '보고서 수정하기' : '이 슬롯에 주제 1(교과 융합)로 등록'),
+                    rep
+                      ? e('button', { onClick: function() { clearSlot(slot); }, className: 'w-full py-2 rounded-xl border border-rose-300 text-rose-700 hover:bg-rose-50 font-bold text-xs flex items-center justify-center gap-1.5' },
+                          e('i', { className: 'fa-solid fa-eraser' }),
+                          e('span', null, '내용 비우기 (다른 주제로 바꾸기)'))
+                      : e('p', { className: 'text-2xs text-slate-500 text-center' }, '다른 주제로 쓰려면 위쪽 주제 탭에서 [보고서 작성] 버튼을 누르세요. 비어 있는 이 슬롯에 들어갑니다.')
+                  )
                 );
               })
             )
@@ -2728,7 +2921,7 @@
             teacherSubTab === 'auth_edit' && e('div', { className: 'bg-white rounded-3xl border border-slate-200 p-6 shadow-sm max-w-md space-y-4 text-xs' },
               e('div', { className: 'border-b pb-2' },
                 e('h3', { className: 'text-sm font-bold text-slate-900' }, '교사 관리자 계정 설정'),
-                e('p', { className: 'text-2xs text-slate-500' }, '로그인 시 사용할 아이디와 6자리 숫자 비밀번호를 설정하세요.')
+                e('p', { className: 'text-2xs text-slate-500' }, '로그인 시 사용할 아이디와 6자리 숫자 비밀번호를 설정하세요. 서버에 저장되어 어느 컴퓨터에서든 같은 정보로 로그인합니다.')
               ),
               e('form', { onSubmit: handleSaveTeacherAuth, className: 'space-y-3' },
                 e('div', null,
@@ -2739,6 +2932,18 @@
                     onChange: function(ev) { setNewTeacherId(ev.target.value); },
                     placeholder: '새 교사 아이디',
                     className: 'w-full p-2.5 border rounded-xl text-xs font-mono',
+                    required: true
+                  })
+                ),
+                e('div', null,
+                  e('label', { className: 'block font-bold text-slate-700 mb-1' }, '지금 쓰고 있는 비밀번호'),
+                  e('input', {
+                    type: 'password',
+                    maxLength: 6,
+                    value: currentTeacherPw,
+                    onChange: function(ev) { setCurrentTeacherPw(ev.target.value); },
+                    placeholder: '현재 6자리 비밀번호',
+                    className: 'w-full p-2.5 border rounded-xl text-xs font-mono tracking-widest',
                     required: true
                   })
                 ),
@@ -3545,7 +3750,7 @@
             e('form', { onSubmit: handleTeacherLogin, className: 'space-y-3' },
               e('input', { type: 'text', placeholder: '교사 아이디', value: teacherIdInput, onChange: function(ev) { setTeacherIdInput(ev.target.value); }, className: 'w-full px-3 py-2 text-xs border rounded-xl font-mono', required: true }),
               e('input', { type: 'password', maxLength: 6, placeholder: '비밀번호 6자리 숫자', value: teacherPwInput, onChange: function(ev) { setTeacherPwInput(ev.target.value); }, className: 'w-full px-3 py-2 text-xs border rounded-xl font-mono tracking-widest', required: true }),
-              e('button', { type: 'submit', className: 'w-full py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs shadow' }, '관리자 로그인')
+              e('button', { type: 'submit', disabled: authBusy, className: 'w-full py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs shadow ' + (authBusy ? 'opacity-60 cursor-wait' : '') }, authBusy ? '확인 중…' : '관리자 로그인')
             )
           )
         )
