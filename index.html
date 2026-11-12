@@ -134,6 +134,27 @@
       return !!e0 && /DEADLINE_CLOSED/.test(String(e0.message || ''));
     }
 
+    function isConfirmedLockError(err) {
+      const e0 = err && err.error !== undefined ? err.error : err;
+      return !!e0 && /CONFIRMED_LOCKED/.test(String(e0.message || ''));
+    }
+
+    // [점수 확정] 확정 정보 (선생님이 [확정하기]를 눌렀을 때만 있음)
+    function getConfirmed(sub) {
+      return (sub && sub.grading && sub.grading.confirmed) || null;
+    }
+
+    // 지금 채점 상태로 확정 점수 계산 (채점이 끝난 과제만 점수, 나머지는 0점)
+    function buildConfirmSnapshot(sub) {
+      const sc = function(slot) {
+        const st = getSlotStatus(sub, slot);
+        return st.kind === 'graded' ? st.score : null;
+      };
+      const s1 = sc('report1');
+      const s2 = sc('report2');
+      return { score1: s1, score2: s2, total: (s1 || 0) + (s2 || 0) };
+    }
+
     // 마감 시각을 사람이 읽는 형태로 (예: 11월 14일 (금) 오전 12:00)
     function formatDeadline(iso) {
       if (!iso) return '';
@@ -511,7 +532,7 @@
       let g = sub && sub.grading && sub.grading[key];
       // 예전 방식으로 채점된 기록(점수만 있는 경우)도 채점 완료로 인정
       if (!g && rep && legacyScore !== undefined) {
-        g = { score: legacyScore, round: 1, reportVersion: rep.updatedAt };
+        g = { score: legacyScore, round: 1, reportVersion: rep.updatedAt, gradedAt: sub.grading.gradedAt };
       }
       if (!rep) return { kind: 'none', label: '미선택' };
       if (g && g.reportVersion === rep.updatedAt) {
@@ -587,7 +608,10 @@
       const analysis = g.analysis !== undefined ? g.analysis : gr['r' + n + '_analysis'];
       const comment = g.comment || '';
       const prev = props.previous;
-      const tone = prev
+      const isFinal = !!props.final && !prev;
+      const tone = isFinal
+        ? { box: 'bg-indigo-50 border-indigo-300', title: 'text-indigo-800', score: 'text-indigo-950' }
+        : prev
         ? { box: 'bg-amber-50 border-amber-200', title: 'text-amber-800', score: 'text-amber-900' }
         : { box: 'bg-emerald-50 border-emerald-200', title: 'text-emerald-700', score: 'text-emerald-900' };
       const row = function(label, v, options) {
@@ -602,7 +626,8 @@
       return e('div', { className: 'mb-4 p-4 rounded-2xl border space-y-2.5 ' + tone.box },
         e('div', { className: 'flex items-start justify-between gap-2' },
           e('div', null,
-            e('p', { className: 'text-xs font-extrabold ' + tone.title }, (prev ? '이전 채점 결과 (' : '채점 결과 (') + g.round + '차)'),
+            e('p', { className: 'text-xs font-extrabold ' + tone.title }, isFinal ? ('최종 점수 (' + g.round + '차 채점)') : ((prev ? '이전 채점 결과 (' : '채점 결과 (') + g.round + '차)')),
+            isFinal && props.confirmedAt && e('p', { className: 'text-2xs text-indigo-700 mt-0.5' }, '선생님이 ' + props.confirmedAt + '에 점수를 확정했습니다.'),
             prev && e('p', { className: 'text-2xs text-amber-700 mt-0.5' }, '보완해서 다시 제출하면 선생님이 다시 채점합니다.')
           ),
           e('p', { className: 'text-xl font-black ' + tone.score }, g.score + '점',
@@ -699,6 +724,26 @@
       );
     }
 
+    // [채점 시각] 보고서 맨 아래에 표시하는 줄
+    function GradedAtFooter(props) {
+      const st = props.status;
+      if (!st || st.kind === 'none') return null;
+      const g = st.grade;
+      if (!g) {
+        return e('div', { className: 'mt-1 pt-3 border-t border-dashed border-slate-200 text-2xs text-slate-400 flex items-center gap-1.5' },
+          e('i', { className: 'fa-regular fa-clock' }),
+          e('span', null, '아직 채점되지 않았습니다'));
+      }
+      const when = g.gradedAt || '기록 없음';
+      const isCurrent = st.kind === 'graded';
+      return e('div', { className: 'mt-1 pt-3 border-t border-dashed text-2xs flex items-center gap-1.5 flex-wrap ' + (isCurrent ? 'border-emerald-200 text-emerald-800' : 'border-amber-200 text-amber-800') },
+        e('i', { className: 'fa-regular fa-clock' }),
+        e('span', { className: 'font-bold' }, (isCurrent ? '채점 시각: ' : '이전 채점 시각: ') + when),
+        e('span', { className: 'opacity-80' }, '· ' + g.round + '차 채점 (' + g.score + '점)'),
+        !isCurrent && e('span', { className: 'opacity-80' }, '· 이후 학생이 내용을 수정함')
+      );
+    }
+
     function ReportView(props) {
       const rep = props.report;
       if (!rep) return e('p', { className: 'text-xs text-slate-400 py-6 text-center' }, '아직 선택한 과제가 없습니다.');
@@ -789,7 +834,8 @@
             })()
           ),
           F('학생의 비판적 검증 및 교정 내용', ai.criticalReview)
-        )
+        ),
+        props.status && e(GradedAtFooter, { status: props.status })
       );
     }
 
@@ -835,6 +881,11 @@
       const [deadlineInput, setDeadlineInput] = useState('');
       const [deadlinePw, setDeadlinePw] = useState('');
       const [deadlineBusy, setDeadlineBusy] = useState(false);
+      // [점수 확정] 학생 로그인 팝업, 학생 기기가 서버에서 내 기록을 받아 왔는지(횟수)
+      const [showFinalPopup, setShowFinalPopup] = useState(false);
+      const [studentCloudLoaded, setStudentCloudLoaded] = useState(0);
+      // 서버가 "확정되어 잠김"이라며 저장을 거부했는지
+      const confirmLockHitRef = useRef(false);
       // 마감 뒤 학생이 제출한 보고서를 읽기 전용으로 보는 창: { slot }
       const [studentViewer, setStudentViewer] = useState(null);
       const [isCloudSyncing, setIsCloudSyncing] = useState(false);
@@ -895,6 +946,14 @@
         applyPortal(Object.assign({}, portalRef.current, { serverClosed: true, known: true }));
       };
       const DEADLINE_MSG = '제출이 마감되어 더 이상 작성·수정·제출할 수 없습니다.';
+      const CONFIRMED_MSG = '선생님이 점수를 확정해서 더 이상 보고서를 고칠 수 없습니다. [내 보고서]에서 최종 점수를 확인하세요.';
+      const lockMessage = function(reason) { return reason === 'confirmed' ? CONFIRMED_MSG : DEADLINE_MSG; };
+      // 저장이 거부된 뒤 그 이유 ('deadline' | 'confirmed' | null)
+      const lockReasonAfterFailedSync = function() {
+        if (confirmLockHitRef.current) return 'confirmed';
+        if (portalRef.current.serverClosed) return 'deadline';
+        return null;
+      };
 
       // 사진 캐시: 키 = 학번:과제:버전 → { status: 'loading'|'ok'|'missing'|'offline', src }
       const [imageCache, setImageCache] = useState({});
@@ -989,6 +1048,7 @@
           let query = supabaseClient.from('submissions').select('student_id, data');
           if (u.role === 'student') query = query.eq('student_id', String(u.id));
           const res = await withTimeout(query);
+          if (!res.error && u.role === 'student') setStudentCloudLoaded(function(n) { return n + 1; });
           if (!res.error && res.data && res.data.length > 0) {
             setAllSubmissions(function(prev) {
               const merged = Object.assign({}, prev);
@@ -1033,6 +1093,7 @@
       //  options.gradingOnly: 채점 저장용. 사진을 건드리지 않고 받은 그대로 저장 (마감 뒤에도 허용되도록)
       const syncStudentToCloud = async function(studentId, submissionData, options) {
         if (!cloudReady() || !studentId) return false;
+        confirmLockHitRef.current = false;
         const gradingOnly = !!(options && options.gradingOnly);
         try {
           let payload = submissionData;
@@ -1051,6 +1112,7 @@
                 if (isNetworkFailure(r)) { markOffline(); return false; }
                 if (isMissingTable(r.error)) { tableMissing = true; break; }
                 if (isDeadlineError(r)) { markPortalClosed(); return false; }
+                if (isConfirmedLockError(r)) { confirmLockHitRef.current = true; return false; }
                 console.error('Image Upload Error:', r.error);
                 return false;
               }
@@ -1085,6 +1147,7 @@
             console.error('Cloud Sync Error:', res.error);
             if (isNetworkFailure(res)) markOffline();
             if (isDeadlineError(res)) markPortalClosed();
+            if (isConfirmedLockError(res)) confirmLockHitRef.current = true;
             return false;
           }
           return true;
@@ -1132,7 +1195,7 @@
         if (!cloudReady() || !u || u.role !== 'student') return;
         try {
           const res = await withTimeout(supabaseClient.from('submissions').select('grading:data->grading').eq('student_id', String(u.id)).maybeSingle(), SERVER_CHECK_MS);
-          if (res.error || !res.data) return;
+          if (res.error || !res.data) return undefined;
           const g = res.data.grading || null;
           setAllSubmissions(function(prev) {
             const mine = prev[u.id];
@@ -1141,8 +1204,10 @@
             safeSetLocal('music_assessment_submissions', JSON.stringify(up));
             return up;
           });
+          return g;
         } catch (err) {
           if (isNetworkFailure(err)) markOffline();
+          return undefined;
         }
       };
 
@@ -1176,11 +1241,12 @@
               return up;
             });
             showToast('이 기기에 저장해 둔 보고서를 선생님께 전달했습니다. ☁️', 5000);
-          } else if (portalRef.current.serverClosed) {
-            // 마감 뒤라 서버가 거부: 더 이상 보내지 않고, 화면은 서버에 제출된 내용으로 되돌림
+          } else if (lockReasonAfterFailedSync()) {
+            // 마감 뒤이거나 점수가 확정되어 서버가 거부: 더 이상 보내지 않고, 화면은 서버에 제출된 내용으로 되돌림
+            const why = lockReasonAfterFailedSync();
             removePendingSync(id);
             fetchSubmissionsFromCloud({ role: 'student', id: id });
-            showToast('제출 마감 이후라 이 기기에만 저장되어 있던 내용은 전달되지 않았습니다.', 7000);
+            showToast((why === 'confirmed' ? '점수가 확정된 뒤라' : '제출 마감 이후라') + ' 이 기기에만 저장되어 있던 내용은 전달되지 않았습니다.', 7000);
           }
         } catch (err) {
           console.error('Pending Push Error:', err);
@@ -1593,6 +1659,8 @@
         cacheLocalAccount(loggedUser.id, acc.name, acc.pw);
         updateCurrentUserSession(loggedUser);
         showToast(acc.name + ' 님, 환영합니다!');
+        finalPopupPendingRef.current = true;
+        setStudentCloudLoaded(0);
         await pushPendingForStudent(loggedUser.id);
         fetchSubmissionsFromCloud(loggedUser);
       };
@@ -1801,15 +1869,19 @@
         setActiveItemEditModal(true);
       };
 
-      // [학생] 저장 직전 마감 확인: 서버에 마감 정보를 다시 물어보고(가능하면), 마감이면 true
-      const studentBlockedByDeadline = async function() {
-        if (!currentUser || currentUser.role !== 'student') return false;
-        if (isPortalClosedNow()) return true;
+      // [학생] 저장 직전 확인: 마감이면 'deadline', 점수가 확정됐으면 'confirmed', 아니면 null
+      //  서버에 다시 물어봐서(가능하면) 마감 직전에 열어 둔 창이나 방금 확정된 경우도 막음
+      const studentEditBlocked = async function() {
+        if (!currentUser || currentUser.role !== 'student') return null;
+        if (isPortalClosedNow()) return 'deadline';
+        if (getConfirmed(allSubmissions[currentUser.id])) return 'confirmed';
         if (cloudReady()) {
           const np = await refreshPortalStatus();
-          if (np && isPortalClosedNow(np)) return true;
+          if (np && isPortalClosedNow(np)) return 'deadline';
+          const g = await checkMyGrading(currentUser);
+          if (g && g.confirmed) return 'confirmed';
         }
-        return false;
+        return null;
       };
 
       // [학생] 과제 슬롯 비우기: 다른 주제로 바꾸고 싶을 때 사용
@@ -1820,7 +1892,8 @@
         const mine = allSubmissions[id] || { studentId: id, studentName: currentUser.name, reports: {} };
         const st = getSlotStatus(mine, slot);
         if (st.kind === 'none') return;
-        if (await studentBlockedByDeadline()) { showToast(DEADLINE_MSG, 6000); return; }
+        const blocked = await studentEditBlocked();
+        if (blocked) { showToast(lockMessage(blocked), 6000); return; }
         const warn = st.kind === 'graded' || st.grade
           ? '선택 과제 ' + n + '의 내용과 선생님의 채점 결과(' + (st.score !== undefined ? st.score + '점' : '') + ')가 모두 지워집니다. 되돌릴 수 없어요. 정말 비울까요?'
           : '선택 과제 ' + n + '에 작성한 내용이 모두 지워집니다. 되돌릴 수 없어요. 정말 비울까요?';
@@ -1857,10 +1930,11 @@
           if (isNetworkFailure(err)) markOffline();
         }
         const sent = await syncStudentToCloud(id, updated);
-        if (!sent && portalRef.current.serverClosed) {
+        const why = sent ? null : lockReasonAfterFailedSync();
+        if (why) {
           removePendingSync(id);
           fetchSubmissionsFromCloud({ role: 'student', id: id });
-          showToast(DEADLINE_MSG, 6000);
+          showToast(lockMessage(why), 6000);
           return;
         }
         if (sent) {
@@ -1884,6 +1958,11 @@
         if (currentUser.role === 'student' && isPortalClosedNow()) {
           setMainTab('my_reports');
           showToast(DEADLINE_MSG + ' [내 보고서] 탭에서 제출한 내용과 점수를 확인하세요.', 6000);
+          return;
+        }
+        if (currentUser.role === 'student' && getConfirmed(allSubmissions[currentUser.id])) {
+          setMainTab('my_reports');
+          showToast(CONFIRMED_MSG, 6000);
           return;
         }
         const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
@@ -2007,9 +2086,12 @@
 
       const saveReport = async function(isSubmit) {
         // 마감 확인: 마감 직전에 창을 열어 두었더라도, 저장하는 순간 서버 시각 기준으로 마감이면 거부
-        if (currentUser.role === 'student' && await studentBlockedByDeadline()) {
-          showToast(DEADLINE_MSG + ' 지금 작성한 내용은 반영되지 않습니다.', 7000);
-          return;
+        if (currentUser.role === 'student') {
+          const blocked = await studentEditBlocked();
+          if (blocked) {
+            showToast(lockMessage(blocked) + ' 지금 작성한 내용은 반영되지 않습니다.', 7000);
+            return;
+          }
         }
         const userKey = currentUser.role === 'teacher' ? 'teacher_preview' : currentUser.id;
         const userName = currentUser.role === 'teacher' ? '교사(점검용)' : currentUser.name;
@@ -2072,11 +2154,12 @@
         }
 
         const sent = await syncStudentToCloud(userKey, fullData);
-        if (!sent && portalRef.current.serverClosed) {
-          // 저장 도중 마감 시각이 지나 서버가 거부함 → 기기에 남은 내용도 버리고 제출된 내용으로 되돌림
+        const why = sent ? null : lockReasonAfterFailedSync();
+        if (why) {
+          // 저장 도중 마감 시각이 지났거나 점수가 확정되어 서버가 거부함 → 기기에 남은 내용도 버리고 제출된 내용으로 되돌림
           removePendingSync(userKey);
           fetchSubmissionsFromCloud({ role: 'student', id: userKey });
-          showToast(DEADLINE_MSG + ' 방금 작성한 내용은 반영되지 않았습니다.', 7000);
+          showToast(lockMessage(why) + ' 방금 작성한 내용은 반영되지 않았습니다.', 7000);
           return;
         }
         if (sent) {
@@ -2177,6 +2260,17 @@
         const score2 = r2Grade ? r2Grade.score : undefined;
         const total = (score1 || 0) + (score2 || 0);
 
+        // 점수 확정 유지 여부: 확정 때와 점수가 달라지면 확정을 자동으로 풀어 다시 확정하게 함
+        let keepConfirmed = prevGrading.confirmed || undefined;
+        let confirmReleased = false;
+        if (keepConfirmed) {
+          const after = buildConfirmSnapshot(Object.assign({}, target, { grading: { r1: r1Grade, r2: r2Grade, score1: score1, score2: score2 } }));
+          if (after.score1 !== keepConfirmed.score1 || after.score2 !== keepConfirmed.score2) {
+            keepConfirmed = undefined;
+            confirmReleased = true;
+          }
+        }
+
         const updatedStudent = Object.assign({}, target, {
           grading: Object.assign({}, gradingForm, {
             r1: r1Grade,
@@ -2184,7 +2278,8 @@
             score1: score1,
             score2: score2,
             totalScore: (r1Grade || r2Grade) ? total : undefined,
-            gradedAt: slots.length ? nowStr : prevGrading.gradedAt
+            gradedAt: slots.length ? nowStr : prevGrading.gradedAt,
+            confirmed: keepConfirmed
           })
         });
 
@@ -2200,7 +2295,63 @@
         setGradingStudentId(null);
         setSlotViewer(null);
         const which = slots.length === 1 ? ('과제 ' + (slots[0] === 'report1' ? '1' : '2') + ' ') : '';
-        showToast(target.studentName + ' 학생 ' + which + '채점이 저장되었습니다. (총점 ' + total + '점 / 60점) 🌟');
+        showToast(target.studentName + ' 학생 ' + which + '채점이 저장되었습니다. (총점 ' + total + '점 / 60점) 🌟' +
+          (confirmReleased ? ' 점수가 바뀌어 확정이 해제되었습니다. 다시 [확정하기]를 눌러 주세요.' : ''), confirmReleased ? 7000 : undefined);
+      };
+
+      // [교사] 점수 확정하기 / 확정 취소
+      const setStudentConfirmed = async function(studentId, makeConfirmed) {
+        if (!cloudReady()) { showToast(SERVER_DOWN_MSG, 6000); return; }
+        let target = allSubmissions[studentId];
+        try {
+          const res = await withTimeout(supabaseClient.from('submissions').select('data').eq('student_id', String(studentId)).maybeSingle(), SERVER_CHECK_MS);
+          if (isNetworkFailure(res)) { markOffline(); showToast(SERVER_DOWN_MSG, 6000); return; }
+          if (res.data && res.data.data) target = res.data.data;
+        } catch (err) {
+          if (isNetworkFailure(err)) { markOffline(); showToast(SERVER_DOWN_MSG, 6000); return; }
+        }
+        if (!target) { showToast('학생 기록을 찾지 못했습니다. [새로고침]을 누른 뒤 다시 시도해 주세요.'); return; }
+        const name = target.studentName || studentId;
+        let grading = Object.assign({}, target.grading || {});
+
+        if (makeConfirmed) {
+          const s1 = getSlotStatus(target, 'report1');
+          const s2 = getSlotStatus(target, 'report2');
+          if (s1.kind !== 'graded' && s2.kind !== 'graded') {
+            showToast('채점이 끝난 과제가 없어 확정할 수 없습니다. 먼저 채점해 주세요.', 5000);
+            return;
+          }
+          const describe = function(st) {
+            if (st.kind === 'graded') return st.score + '점';
+            if (st.kind === 'none') return '미선택 (0점)';
+            if (st.kind === 'draft') return '최종 제출 안 함 (0점)';
+            if (st.kind === 'resubmitted') return '다시 제출했지만 아직 다시 채점 안 함 (0점으로 확정됨)';
+            return '제출했지만 아직 채점 안 함 (0점으로 확정됨)';
+          };
+          const snap = buildConfirmSnapshot(target);
+          const ungraded = s1.kind === 'submitted' || s1.kind === 'resubmitted' || s2.kind === 'submitted' || s2.kind === 'resubmitted';
+          const msg = name + ' 학생의 점수를 확정할까요?\n\n' +
+            '과제 1: ' + describe(s1) + '\n과제 2: ' + describe(s2) + '\n합계: ' + snap.total + ' / 60점\n\n' +
+            (ungraded ? '⚠ 제출했지만 아직 채점하지 않은 과제가 있어요. 그대로 확정하면 그 과제는 0점으로 보입니다.\n\n' : '') +
+            '확정하면 학생에게 최종 점수로 보이고, 학생은 더 이상 보고서를 고칠 수 없습니다.';
+          if (!window.confirm(msg)) return;
+          grading.confirmed = Object.assign(snap, { at: new Date().toLocaleString('ko-KR') });
+        } else {
+          if (!window.confirm(name + ' 학생의 점수 확정을 취소할까요?\n학생 화면의 "최종 점수" 표시가 사라지고, 마감 전이라면 학생이 다시 보고서를 고칠 수 있습니다.')) return;
+          delete grading.confirmed;
+        }
+
+        const updated = Object.assign({}, target, { grading: grading });
+        const ok = await syncStudentToCloud(studentId, updated, { gradingOnly: true });
+        if (!ok) { showToast('저장하지 못했습니다. 잠시 후 다시 시도해 주세요.', 5000); return; }
+        setAllSubmissions(function(prev) {
+          const up = Object.assign({}, prev, { [studentId]: updated });
+          safeSetLocal('music_assessment_submissions', JSON.stringify(up));
+          return up;
+        });
+        showToast(makeConfirmed
+          ? name + ' 학생의 점수를 확정했습니다. (최종 ' + grading.confirmed.total + ' / 60점) ✅'
+          : name + ' 학생의 점수 확정을 취소했습니다.', 5000);
       };
 
       // 채점 창의 과제별 점수 선택 영역
@@ -2425,7 +2576,7 @@
 
       
       const downloadCSV = function() {
-        const rows = [['학번', '성명', '과제1 주제', '과제1 점수(30)', '과제1 상태', '과제2 주제', '과제2 점수(30)', '과제2 상태', '총점(60)', '세특 메모']];
+        const rows = [['학번', '성명', '과제1 주제', '과제1 점수(30)', '과제1 상태', '과제2 주제', '과제2 점수(30)', '과제2 상태', '총점(60)', '점수 확정', '세특 메모']];
         Object.values(allSubmissions).forEach(function(s) {
           const r1 = s.reports && s.reports.report1;
           const r2 = s.reports && s.reports.report2;
@@ -2443,6 +2594,7 @@
             sc2,
             '"' + getSlotStatus(s, 'report2').label + '"',
             total,
+            getConfirmed(s) ? '"확정 ' + getConfirmed(s).at + ' (' + getConfirmed(s).total + '점)"' : '미확정',
             '"' + ((s.grading && s.grading.teacherFeedback) || '').replace(/"/g, '""') + '"'
           ]);
         });
@@ -2476,9 +2628,56 @@
         }
       }, [gradingStudentId, slotViewer, mainTab, activeReportModal, studentViewer, allSubmissions, currentUser, serverStatus]);
 
+      // [점수 확정] 로그인(또는 페이지를 연) 직후 서버에서 내 기록을 받아 온 시점에 한 번만 팝업 판단
+      const finalPopupPendingRef = useRef(!!(currentUser && currentUser.role === 'student'));
+      useEffect(function() {
+        if (!currentUser || currentUser.role !== 'student') { setShowFinalPopup(false); return; }
+        if (!finalPopupPendingRef.current || !studentCloudLoaded) return;
+        finalPopupPendingRef.current = false;
+        if (getConfirmed(allSubmissions[currentUser.id])) setShowFinalPopup(true);
+      }, [studentCloudLoaded, allSubmissions, currentUser]);
+
       const closedNow = isPortalClosedNow(portal);
+      const myConfirmed = currentUser && currentUser.role === 'student' ? getConfirmed(allSubmissions[currentUser.id]) : null;
+      // 학생이 더 이상 고칠 수 없는 상태 (마감 또는 점수 확정)
+      const studentLocked = !!(currentUser && currentUser.role === 'student' && (closedNow || myConfirmed));
 
       return e('div', { className: 'min-h-screen flex flex-col' },
+        // [점수 확정] 학생 로그인 시 최종 점수 팝업
+        showFinalPopup && myConfirmed && (function() {
+          const mine = allSubmissions[currentUser.id];
+          const row = function(slot) {
+            const n = slot === 'report1' ? '1' : '2';
+            const rep = mine.reports && mine.reports[slot];
+            const sc = slot === 'report1' ? myConfirmed.score1 : myConfirmed.score2;
+            const g = mine.grading && mine.grading['r' + n];
+            return e('div', { key: slot, className: 'p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1' },
+              e('div', { className: 'flex items-center justify-between gap-2' },
+                e('div', { className: 'min-w-0' },
+                  e('p', { className: 'text-2xs font-bold text-slate-500' }, '선택 과제 ' + n),
+                  e('p', { className: 'text-xs font-bold text-slate-900 truncate' }, rep ? (rep.topicTitle || '(제목 없음)') : '선택하지 않음')
+                ),
+                e('p', { className: 'font-black text-lg text-indigo-900 shrink-0' }, (sc === null || sc === undefined ? 0 : sc) + '점', e('span', { className: 'text-2xs font-bold text-slate-400 ml-0.5' }, '/ 30'))
+              ),
+              g && g.comment && e('p', { className: 'text-2xs text-slate-600 leading-relaxed' }, '💬 ' + g.comment)
+            );
+          };
+          return e('div', { className: 'fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm' },
+            e('div', { className: 'bg-white rounded-3xl shadow-2xl border border-indigo-200 w-full max-w-sm overflow-hidden' },
+              e('div', { className: 'p-5 bg-indigo-900 text-white text-center' },
+                e('p', { className: 'text-xs font-bold text-indigo-200' }, currentUser.name + ' 님의 음악 수행평가'),
+                e('p', { className: 'text-sm font-bold mt-1' }, '최종 점수'),
+                e('p', { className: 'text-4xl font-black mt-1' }, myConfirmed.total, e('span', { className: 'text-base font-bold text-indigo-200 ml-1' }, '/ 60점')),
+                e('p', { className: 'text-2xs text-indigo-200 mt-1' }, '확정: ' + myConfirmed.at)
+              ),
+              e('div', { className: 'p-4 space-y-2' }, row('report1'), row('report2')),
+              e('div', { className: 'p-4 pt-0 grid grid-cols-2 gap-2' },
+                e('button', { onClick: function() { setShowFinalPopup(false); }, className: 'py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50' }, '확인'),
+                e('button', { onClick: function() { setShowFinalPopup(false); setMainTab('my_reports'); }, className: 'py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs' }, '자세히 보기')
+              )
+            )
+          );
+        })(),
         // 토스트 메시지
         toastMessage && e('div', { className: 'fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-xs font-bold border border-slate-700 flex items-center gap-2' },
           e('i', { className: 'fa-solid fa-circle-check text-emerald-400' }),
@@ -2559,8 +2758,16 @@
           )
         ),
 
-        // 제출 마감 안내 배너 (학생)
-        currentUser && currentUser.role === 'student' && closedNow && e('div', { className: 'bg-rose-100 border-b border-rose-300 text-rose-950 py-2.5 px-4' },
+        // 점수 확정 안내 배너 (학생)
+        myConfirmed && e('div', { className: 'bg-emerald-100 border-b border-emerald-300 text-emerald-950 py-2.5 px-4' },
+          e('div', { className: 'max-w-7xl mx-auto flex items-center gap-2 text-xs' },
+            e('i', { className: 'fa-solid fa-circle-check text-emerald-600' }),
+            e('span', { className: 'font-bold' }, '선생님이 점수를 확정했습니다. 최종 점수 ' + myConfirmed.total + ' / 60점'),
+            e('button', { onClick: function() { setShowFinalPopup(true); }, className: 'ml-auto px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-2xs whitespace-nowrap' }, '최종 점수 보기')
+          )
+        ),
+        // 제출 마감 안내 배너 (학생, 점수 확정 전)
+        currentUser && currentUser.role === 'student' && closedNow && !myConfirmed && e('div', { className: 'bg-rose-100 border-b border-rose-300 text-rose-950 py-2.5 px-4' },
           e('div', { className: 'max-w-7xl mx-auto flex items-center gap-2 text-xs' },
             e('i', { className: 'fa-solid fa-lock text-rose-600' }),
             e('span', { className: 'font-bold' }, '제출이 마감되었습니다' + (portal.deadline && !portal.manual ? ' (' + formatDeadline(portal.deadline) + ')' : '') + '. 이제 제출한 보고서와 점수만 확인할 수 있어요.'),
@@ -2964,7 +3171,14 @@
           mainTab === 'my_reports' && currentUser && currentUser.role === 'student' && e('div', { className: 'space-y-6' },
             e('div', { className: 'bg-gradient-to-r from-rose-900 to-indigo-950 rounded-3xl p-6 text-white' },
               e('h2', { className: 'text-xl font-black' }, currentUser.name + ' (' + currentUser.id + ') 님의 개인 탐구 2개 종합 정리'),
-              e('p', { className: 'text-xs text-slate-300 mt-1' }, '각 과제당 30점씩 총 60점 만점 구조입니다. 제출 상태와 채점 결과가 이 화면에 실시간으로 표시됩니다.')
+              e('p', { className: 'text-xs text-slate-300 mt-1' }, '각 과제당 30점씩 총 60점 만점 구조입니다. 제출 상태와 채점 결과가 이 화면에 실시간으로 표시됩니다.'),
+              myConfirmed && e('div', { className: 'mt-4 inline-flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-white/10 border border-white/20' },
+                e('i', { className: 'fa-solid fa-circle-check text-emerald-300' }),
+                e('div', null,
+                  e('p', { className: 'text-2xs text-slate-300' }, '최종 점수 (확정: ' + myConfirmed.at + ')'),
+                  e('p', { className: 'text-2xl font-black' }, myConfirmed.total, e('span', { className: 'text-xs font-bold text-slate-300 ml-1' }, '/ 60점'))
+                )
+              )
             ),
             e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
               ['report1', 'report2'].map(function(slot, idx) {
@@ -2979,7 +3193,7 @@
                       const mine = allSubmissions[currentUser.id];
                       const st = getSlotStatus(mine, slot);
                       if (st.kind === 'graded') {
-                        return e(GradeResultCard, { grade: st.grade, sub: mine, slot: slot });
+                        return e(GradeResultCard, { grade: st.grade, sub: mine, slot: slot, final: !!getConfirmed(mine), confirmedAt: getConfirmed(mine) && getConfirmed(mine).at });
                       }
                       const parts = [];
                       if (st.kind === 'submitted' || st.kind === 'resubmitted') {
@@ -3020,15 +3234,16 @@
                           );
                         })()
                       )
-                    ) : e('p', { className: 'text-xs text-slate-400 py-8 text-center' }, '아직 선택된 탐구 과제가 없습니다.')
+                    ) : e('p', { className: 'text-xs text-slate-400 py-8 text-center' }, '아직 선택된 탐구 과제가 없습니다.'),
+                    rep && e(GradedAtFooter, { status: getSlotStatus(allSubmissions[currentUser.id], slot) })
                   ),
-                  closedNow ? e('div', { className: 'mt-6 space-y-2' },
+                  studentLocked ? e('div', { className: 'mt-6 space-y-2' },
                     rep && rep.isSubmitted
                       ? e('button', { onClick: function() { setStudentViewer({ slot: slot }); }, className: 'w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center justify-center gap-1.5' },
                           e('i', { className: 'fa-solid fa-eye' }),
                           e('span', null, '제출한 보고서 보기'))
                       : e('p', { className: 'text-2xs text-rose-600 text-center font-bold' },
-                          rep ? '마감 전에 최종 제출하지 않은 과제라 채점되지 않습니다.' : '마감되어 새 과제를 등록할 수 없습니다.')
+                          rep ? '최종 제출하지 않은 과제라 채점되지 않습니다.' : (myConfirmed ? '점수가 확정되어 새 과제를 등록할 수 없습니다.' : '마감되어 새 과제를 등록할 수 없습니다.'))
                   ) :
                   e('div', { className: 'mt-6 space-y-2' },
                     e('button', { onClick: function() { openReportModal((rep && rep.topicCategory) || 'inquiry', rep, slot); }, className: 'w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs' }, rep ? '보고서 수정하기' : '이 슬롯에 주제 1(교과 융합)로 등록'),
@@ -3143,6 +3358,14 @@
                           setGradingStudentId(s.studentId);
                           initGradingForm(s);
                         }, className: 'px-2.5 py-1 rounded bg-slate-900 text-white font-bold text-2xs hover:bg-slate-800' }, '채점하기'),
+                        // [점수 확정] 확정하기 / 확정됨(누르면 확정 취소)
+                        getConfirmed(s)
+                          ? e('button', { onClick: function() { setStudentConfirmed(s.studentId, false); }, title: '확정 시각: ' + getConfirmed(s).at + ' · 누르면 확정 취소', className: 'px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-2xs flex items-center gap-1 whitespace-nowrap' },
+                              e('i', { className: 'fa-solid fa-circle-check' }),
+                              e('span', null, '확정됨 · 취소'))
+                          : e('button', { onClick: function() { setStudentConfirmed(s.studentId, true); }, className: 'px-2.5 py-1 rounded border border-emerald-500 text-emerald-700 hover:bg-emerald-50 font-bold text-2xs flex items-center gap-1 whitespace-nowrap' },
+                              e('i', { className: 'fa-solid fa-stamp' }),
+                              e('span', null, '확정하기')),
                            // [신규] 상세/채점 옆 '편집 및 삭제' 빨간색 버튼
                           e('button', { onClick: function() {
                             setEditingStudentTargetId(s.studentId);
@@ -3234,8 +3457,8 @@
                 )
               ),
               e('div', { className: 'p-6 overflow-y-auto space-y-4 flex-1 text-xs' },
-                st.kind === 'graded' && e(GradeResultCard, { grade: st.grade, sub: mine, slot: slot }),
-                e(ReportView, { report: rep, imageInfo: resolveScreenshot(currentUser.id, slot, rep && rep.aiLog) })
+                st.kind === 'graded' && e(GradeResultCard, { grade: st.grade, sub: mine, slot: slot, final: !!getConfirmed(mine), confirmedAt: getConfirmed(mine) && getConfirmed(mine).at }),
+                e(ReportView, { report: rep, status: st, imageInfo: resolveScreenshot(currentUser.id, slot, rep && rep.aiLog) })
               ),
               e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex justify-end' },
                 e('button', { onClick: function() { setStudentViewer(null); }, className: 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100' }, '닫기')
@@ -3312,9 +3535,11 @@
               )
             ),
 
-            currentUser && currentUser.role === 'student' && closedNow && e('div', { className: 'px-5 py-3 bg-rose-600 text-white text-xs font-bold flex items-center gap-2' },
+            studentLocked && e('div', { className: 'px-5 py-3 bg-rose-600 text-white text-xs font-bold flex items-center gap-2' },
               e('i', { className: 'fa-solid fa-lock' }),
-              e('span', null, '제출 마감 시각이 지났습니다. 이 창에서 작성한 내용은 저장·제출되지 않습니다.')
+              e('span', null, myConfirmed
+                ? '선생님이 점수를 확정했습니다. 이 창에서 작성한 내용은 저장·제출되지 않습니다.'
+                : '제출 마감 시각이 지났습니다. 이 창에서 작성한 내용은 저장·제출되지 않습니다.')
             ),
             currentUser && currentUser.role === 'student' && !closedNow && portal.deadline && e('div', { className: 'px-5 py-2 bg-amber-50 border-b border-amber-200 text-amber-900 text-2xs font-bold flex items-center gap-1.5' },
               e('i', { className: 'fa-solid fa-clock' }),
@@ -3749,10 +3974,10 @@
             ),
 
             e('div', { className: 'flex justify-end gap-2 p-4 border-t bg-slate-50' },
-              (currentUser && currentUser.role === 'student' && closedNow)
+              studentLocked
                 ? e('button', { onClick: function() { setActiveReportModal(false); setMainTab('my_reports'); }, className: 'px-5 py-2 bg-slate-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5' },
                     e('i', { className: 'fa-solid fa-lock' }),
-                    e('span', null, '마감됨 · 창 닫기'))
+                    e('span', null, (myConfirmed ? '점수 확정됨' : '마감됨') + ' · 창 닫기'))
                 : e(React.Fragment, null,
                     e('button', { onClick: function() { saveReport(false); }, className: 'px-4 py-2 border rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-100' }, '임시 저장'),
                     e('button', { onClick: function() { saveReport(true); }, className: 'px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow' }, '최종 제출')
@@ -3922,7 +4147,10 @@
               e('div', { className: 'p-5 border-b border-slate-200 flex items-center justify-between bg-purple-50' },
                 e('div', null,
                   e('h3', { className: 'text-base font-black text-purple-950' }, sub.studentName + ' (' + sub.studentId + ') 학생 수행평가 채점'),
-                  e('p', { className: 'text-xs text-purple-700 mt-0.5' }, '과제별 보고서를 학생이 작성한 화면 구성 그대로 확인하고, 제출된 과제만 채점합니다. (과제당 30점, 총 60점)')
+                  e('p', { className: 'text-xs text-purple-700 mt-0.5' }, '과제별 보고서를 학생이 작성한 화면 구성 그대로 확인하고, 제출된 과제만 채점합니다. (과제당 30점, 총 60점)'),
+                  getConfirmed(sub) && e('p', { className: 'mt-1.5 text-2xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1 inline-flex items-center gap-1' },
+                    e('i', { className: 'fa-solid fa-circle-check' }),
+                    e('span', null, '점수 확정됨 (' + getConfirmed(sub).at + ') · 점수를 바꿔 저장하면 확정이 자동으로 풀립니다'))
                 ),
                 e('button', { onClick: function() { setGradingStudentId(null); }, className: 'text-slate-400 hover:text-slate-600' },
                   e('i', { className: 'fa-solid fa-xmark text-lg' })
@@ -3940,7 +4168,7 @@
                       e(StatusBadge, { status: st })
                     ),
                     e('div', { className: 'p-4 space-y-4' },
-                      e(ReportView, { report: rep, imageInfo: resolveScreenshot(gradingStudentId, slot, rep && rep.aiLog) }),
+                      e(ReportView, { report: rep, status: st, imageInfo: resolveScreenshot(gradingStudentId, slot, rep && rep.aiLog) }),
                       rep ? (isGradableStatus(st) ? renderGradePanel(slot) : renderNotGradable()) : null
                     )
                   );
@@ -3995,7 +4223,7 @@
                 )
               ),
               e('div', { className: 'p-6 overflow-y-auto space-y-5 flex-1 text-xs' },
-                e(ReportView, { report: rep, imageInfo: resolveScreenshot(slotViewer.studentId, slot, rep && rep.aiLog) }),
+                e(ReportView, { report: rep, status: st, imageInfo: resolveScreenshot(slotViewer.studentId, slot, rep && rep.aiLog) }),
                 gradable ? renderGradePanel(slot) : renderNotGradable()
               ),
               e('div', { className: 'p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2' },
